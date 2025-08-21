@@ -8,7 +8,7 @@ module suiverse_economics::revenue_distribution {
     use sui::event;
     use sui::clock::{Self, Clock};
     use sui::transfer;
-    use suiverse::utils;
+    use suiverse_economics::utils;
 
     // Error codes
     const E_NOT_AUTHORIZED: u64 = 1;

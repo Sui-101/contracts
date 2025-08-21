@@ -1,7 +1,7 @@
 /// Enhanced Core Certification Module for SuiVerse
 /// Implements comprehensive certificate NFT management with dynamic valuation,
 /// expiration handling, and integration with the Proof of Knowledge system.
-module suiverse_economics::certificates {
+module suiverse_certificate::certificates {
     use std::string::{Self, String};
     use std::ascii;
     use std::option::{Self, Option};

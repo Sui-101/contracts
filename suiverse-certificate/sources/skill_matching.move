@@ -1,7 +1,7 @@
 /// Comprehensive P2P Skill Matching Module for SuiVerse
 /// Implements certificate-based talent discovery and contact facilitation
 /// Follows Clean Architecture and SOLID principles
-module suiverse_economics::skill_matching {
+module suiverse_certificate::skill_matching {
     use std::string::{Self as string, String};
     // use std::option; // Implicit import
     use sui::object::{ID, UID};
@@ -14,8 +14,8 @@ module suiverse_economics::skill_matching {
     use sui::clock::{Self, Clock};
     use sui::random::{Self, Random};
     use sui::bcs;
-    use suiverse_economics::certificates::{Self as certificates, CertificateNFT};
-    use suiverse::registry::{Self as registry, CertificateRegistry};
+    use suiverse_certificate::certificates::{Self as certificates, CertificateNFT};
+    use suiverse_certificate::registry::{Self as registry, CertificateRegistry};
 
     // ===== Constants =====
     

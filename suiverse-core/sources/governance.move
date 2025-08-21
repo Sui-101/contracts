@@ -1,17 +1,19 @@
 module suiverse_core::governance {
-    use std::string::String;
-    // use std::option; // Implicit import
-    use sui::object::{ID, UID};
-    use sui::tx_context::{TxContext};
-    use sui::coin::{Self, Coin};
+    use std::string::{Self as string, String};
+    use std::option::{Self as option, Option};
+    use std::vector;
+    use sui::object::{Self as object, ID, UID};
+    use sui::tx_context::{Self as tx_context, TxContext};
+    use sui::coin::{Self as coin, Coin};
     use sui::sui::SUI;
-    use sui::balance::{Self, Balance};
+    use sui::balance::{Self as balance, Balance};
     use sui::event;
-    use sui::table::{Self, Table};
-    use sui::clock::{Self, Clock};
+    use sui::table::{Self as table, Table};
+    use sui::clock::{Self as clock, Clock};
+    use sui::transfer;
     use sui::math;
-    use suiverse_core::parameters::{Self, SystemParameters};
-    use suiverse_core::treasury::{Self, Treasury};
+    use suiverse_core::parameters::{Self as parameters, GlobalParameters};
+    use suiverse_core::treasury::{Self as treasury, Treasury};
     
     // =============== Constants ===============
     
@@ -721,7 +723,7 @@ module suiverse_core::governance {
         // Apply bootstrap phase cap (max 50% slash)
         let max_slash = balance::value(&validator.stake_amount) * 50 / 100;
         let calculated_slash = balance::value(&validator.stake_amount) * effective_slash / 100;
-        let final_slash = std::u64::min(calculated_slash, max_slash);
+        let final_slash = if (calculated_slash < max_slash) { calculated_slash } else { max_slash };
         
         // Never slash below minimum stake
         let remaining_stake = balance::value(&validator.stake_amount) - final_slash;
@@ -990,7 +992,8 @@ module suiverse_core::governance {
         if (total_issued == 0) {
             200 // 2x multiplier for first certificate
         } else {
-            std::u64::min(SCARCITY_BASE_MULTIPLIER / (total_issued + 1), 200)
+            let calc = SCARCITY_BASE_MULTIPLIER / (total_issued + 1);
+            if (calc < 200) { calc } else { 200 }
         }
     }
     
@@ -1057,7 +1060,8 @@ module suiverse_core::governance {
         // Simplified random selection
         let mut i = 0;
         let mut selected_count = 0;
-        while (selected_count < count && i < table::length(&pool.active_validators)) {
+        let table_len = table::length(&pool.active_validators);
+        while (selected_count < count && i < table_len) {
             // In production, iterate through active validators properly
             i = i + 1;
             selected_count = selected_count + 1;
@@ -1094,8 +1098,10 @@ module suiverse_core::governance {
             let domain_validators = table::borrow(&pool.validators_by_domain, *domain);
             // Select top validators from domain
             let mut i = 0;
-            while (i < std::u64::min(count, vector::length(domain_validators) as u64)) {
-                vector::push_back(&mut validators, *vector::borrow(domain_validators, i as u64));
+            let domain_len = vector::length(domain_validators);
+            let limit = if (count < domain_len) { count } else { domain_len };
+            while (i < limit) {
+                vector::push_back(&mut validators, *vector::borrow(domain_validators, i));
                 i = i + 1;
             };
         };
@@ -1359,7 +1365,7 @@ module suiverse_core::governance {
     /// Execute a passed proposal
     public entry fun execute_proposal(
         proposal: &mut GovernanceProposal,
-        params: &mut SystemParameters,
+        params: &mut GlobalParameters,
         treasury: &mut Treasury,
         clock: &Clock,
         ctx: &mut TxContext,

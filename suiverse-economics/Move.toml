@@ -10,8 +10,8 @@ SuiVerseCore = { local = "../suiverse-core" }
 SuiVerseContent = { local = "../suiverse-content" }
 
 [addresses]
-suiverse_core = ""
-suiverse_content = "" 
-suiverse_economics = "0x2"
+suiverse_core = "0x711a615a0603193f81f2ca50db96bc2231c6fb070a58ee95917347a410473faf"
+suiverse_content = "0xe85e9cccdd08468abc23c1e3411112f9b24d1d2d146d5a851dd7cc3fde3326d7" 
+suiverse_economics = "0x07324a2f816fd4ef9d45a03b0d24768d2b03bcc70047b8133e063fc4828ac393"
 
 [dev-dependencies]

@@ -12,16 +12,17 @@
 /// - Yield optimization and economic incentive alignment
 module suiverse_core::treasury {
     use std::string::{Self as string, String};
-    // use std::option; // Implicit import
-    use sui::object::{ID, UID};
-    use sui::tx_context::{TxContext};
-    use sui::coin::{Self, Coin};
+    use std::option::{Self as option, Option};
+    use std::vector;
+    use sui::object::{Self as object, ID, UID};
+    use sui::tx_context::{Self as tx_context, TxContext};
+    use sui::coin::{Self as coin, Coin};
     use sui::sui::SUI;
-    use sui::balance::{Self, Balance};
+    use sui::balance::{Self as balance, Balance};
     use sui::event;
-    use sui::table::{Self, Table};
-    use sui::clock::{Self, Clock};
-    use sui::math;
+    use sui::table::{Self as table, Table};
+    use sui::clock::{Self as clock, Clock};
+    use sui::transfer;
     use suiverse_core::utils;
 
     // Import related modules for integration
@@ -754,7 +755,7 @@ module suiverse_core::treasury {
     // =============== Package-level Withdrawal Functions ===============
     
     /// Enhanced withdrawal for rewards with governance tracking
-    public(package) fun withdraw_for_rewards(
+    public fun withdraw_for_rewards(
         treasury: &mut Treasury,
         amount: u64,
         recipient: address,
@@ -822,7 +823,7 @@ module suiverse_core::treasury {
     }
 
     /// Enhanced withdrawal for validation rewards with performance tracking
-    public(package) fun withdraw_for_validation(
+    public fun withdraw_for_validation(
         treasury: &mut Treasury,
         amount: u64,
         recipient: address,
@@ -876,7 +877,7 @@ module suiverse_core::treasury {
     }
 
     /// Governance-controlled withdrawal with proposal tracking
-    public(package) fun withdraw_for_governance(
+    public fun withdraw_for_governance(
         treasury: &mut Treasury,
         amount: u64,
         recipient: address,
@@ -930,7 +931,7 @@ module suiverse_core::treasury {
     }
 
     /// Withdraw staking rewards with compound option
-    public(package) fun withdraw_staking_rewards(
+    public fun withdraw_staking_rewards(
         treasury: &mut Treasury,
         staker: address,
         auto_compound: bool,
@@ -1289,16 +1290,12 @@ module suiverse_core::treasury {
         };
         
         // Execute based on action type
-        match (governance_action.action_type) {
-            ACTION_ALLOCATE_FUNDS => {
-                // Implementation would handle fund allocation
-            },
-            ACTION_UPDATE_STRATEGY => {
-                // Implementation would handle strategy updates
-            },
-            _ => {
-                // Handle other action types
-            }
+        if (governance_action.action_type == ACTION_ALLOCATE_FUNDS) {
+            // Implementation would handle fund allocation
+        } else if (governance_action.action_type == ACTION_UPDATE_STRATEGY) {
+            // Implementation would handle strategy updates  
+        } else {
+            // Handle other action types
         };
         
         event::emit(GovernanceActionExecuted {
@@ -1721,10 +1718,8 @@ module suiverse_core::treasury {
         let adjustment = if (positive_event) { 100 } else { 50 }; // +1% or -0.5%
         
         if (positive_event) {
-            pool.performance_metrics.performance_score = math::min(
-                pool.performance_metrics.performance_score + adjustment,
-                10000 // Max 100%
-            );
+            let new_score = pool.performance_metrics.performance_score + adjustment;
+            pool.performance_metrics.performance_score = if (new_score < 10000) { new_score } else { 10000 };
         } else {
             pool.performance_metrics.performance_score = if (pool.performance_metrics.performance_score > adjustment) {
                 pool.performance_metrics.performance_score - adjustment
@@ -1750,7 +1745,7 @@ module suiverse_core::treasury {
         let mut i = 0;
         while (i < vector::length(audit_logs)) {
             let audit_entry = vector::borrow_mut(audit_logs, i);
-            if (*string::bytes(&audit_entry.audit_type) == b"Emergency Mode Activation") {
+            if (*string::as_bytes(&audit_entry.audit_type) == b"Emergency Mode Activation") {
                 audit_entry.resolved = true;
             };
             i = i + 1;
@@ -1812,7 +1807,7 @@ module suiverse_core::treasury {
 
     /// Execute specific compliance check
     fun execute_compliance_check(treasury: &Treasury, check_type: &String): bool {
-        let check_bytes = *string::bytes(check_type);
+        let check_bytes = *string::as_bytes(check_type);
         
         if (check_bytes == b"emergency_mode_off") {
             !treasury.emergency_mode

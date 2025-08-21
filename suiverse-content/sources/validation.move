@@ -16,7 +16,7 @@ module suiverse_content::validation {
     
     // Friend modules
     use suiverse_core::treasury::{Self, Treasury};
-    use suiverse_core::parameters::{Self, SystemParameters};
+    use suiverse_core::parameters::{Self, GlobalParameters};
     use suiverse_core::governance::{Self, ValidatorRegistry};
 
     // =============== Constants ===============
@@ -251,7 +251,7 @@ module suiverse_content::validation {
         deposit: Coin<SUI>,
         config: &ValidationConfig,
         registry: &ValidatorRegistry,
-        params: &SystemParameters,
+        params: &GlobalParameters,
         treasury: &mut Treasury,
         clock: &Clock,
         ctx: &mut TxContext,
@@ -651,7 +651,7 @@ module suiverse_content::validation {
     }
 
     /// Get required deposit based on content type
-    fun get_required_deposit(content_type: u8, params: &SystemParameters): u64 {
+    fun get_required_deposit(content_type: u8, params: &GlobalParameters): u64 {
         if (content_type == CONTENT_TYPE_ARTICLE) {
             parameters::get_article_deposit_original(params)
         } else if (content_type == CONTENT_TYPE_PROJECT) {

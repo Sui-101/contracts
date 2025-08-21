@@ -12,7 +12,7 @@
 /// - Backup and recovery mechanisms
 /// - Comprehensive analytics and audit logging
 /// - Integration with existing SuiVerse ecosystem
-module suiverse_economics::quiz_vault {
+module suiverse_certificate::quiz_vault {
     use std::string::{Self as string, String};
     use std::option::{Self, Option};
     use std::vector;

@@ -14,7 +14,7 @@ module suiverse_content::quizzes {
     use sui::bcs;
     
     // Dependencies
-    use suiverse_core::parameters::{Self, SystemParameters};
+    use suiverse_core::parameters::{Self, GlobalParameters};
     use suiverse_content::validation::{Self, ValidationReview};
     use suiverse_content::tags::{Self, TagRegistry, ContentTagMapping, TagStats};
 
@@ -271,7 +271,7 @@ module suiverse_content::quizzes {
         prerequisites: vector<ID>,
         max_variations: u64,
         deposit: Coin<SUI>,
-        params: &SystemParameters,
+        params: &GlobalParameters,
         analytics: &mut QuizAnalytics,
         tag_registry: &mut TagRegistry,
         tag_mapping: &mut ContentTagMapping,

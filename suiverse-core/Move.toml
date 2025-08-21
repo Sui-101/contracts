@@ -8,6 +8,6 @@ edition = "2024.beta"
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
 
 [addresses]
-suiverse_core = "0x0"
+suiverse_core = "0x711a615a0603193f81f2ca50db96bc2231c6fb070a58ee95917347a410473faf"
 
 [dev-dependencies]

@@ -11,7 +11,7 @@
 /// - Gas-optimized implementation with efficient caching
 /// - Semantic preservation and difficulty consistency
 /// - Integration with session management and analytics
-module suiverse_economics::quiz_variation {
+module suiverse_certificate::quiz_variation {
     use std::string::{Self as string, String};
     use std::option;
     use sui::object;

@@ -12,7 +12,7 @@ module suiverse_content::projects {
     use sui::clock::{Self, Clock};
     use sui::url::{Self, Url};
     use sui::transfer;
-    use suiverse_core::parameters::{Self, SystemParameters};
+    use suiverse_core::parameters::{Self, GlobalParameters};
     use suiverse_content::validation::{Self, ValidationSession};
     use suiverse_core::treasury::{Self, Treasury};
 
@@ -205,7 +205,7 @@ module suiverse_content::projects {
         difficulty: u8,
         tech_stack: vector<String>,
         deposit: Coin<SUI>,
-        params: &SystemParameters,
+        params: &GlobalParameters,
         stats: &mut ProjectStats,
         clock: &Clock,
         ctx: &mut TxContext,
@@ -436,7 +436,7 @@ module suiverse_content::projects {
     public entry fun view_project(
         project: &mut Project,
         treasury: &mut Treasury,
-        params: &SystemParameters,
+        params: &GlobalParameters,
         stats: &mut ProjectStats,
         clock: &Clock,
         ctx: &mut TxContext,

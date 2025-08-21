@@ -12,7 +12,7 @@
 /// - Gas-optimized answer storage using dynamic fields
 /// - Real-time session monitoring and timeout handling
 /// - Comprehensive session analytics and performance tracking
-module suiverse_economics::session_management {
+module suiverse_certificate::session_management {
     use std::string::{Self as string, String};
     // use std::option; // Implicit import
     use sui::object::{Self, ID, UID};

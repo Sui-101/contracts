@@ -1,7 +1,7 @@
 /// Certificate Templates Module for SuiVerse
 /// Provides standardized certificate templates with governance approval
 /// Implements dynamic certificate generation and validation rules
-module suiverse_economics::templates {
+module suiverse_certificate::templates {
     use std::string::{Self, String};
     use std::option::{Self, Option};
     use std::vector;
@@ -17,7 +17,7 @@ module suiverse_economics::templates {
     use sui::sui::SUI;
     use sui::balance::{Self, Balance};
     use sui::hash;
-    use suiverse_economics::certificates::{Self, CertificateNFT, CertificateMetadata, CertificateManager, CertificateStats};
+    use suiverse_certificate::certificates::{Self, CertificateNFT, CertificateMetadata, CertificateManager, CertificateStats};
     use suiverse_core::parameters::{Self, SystemParameters};
 
     // =============== Error Constants ===============

@@ -1,13 +1,12 @@
 module suiverse_core::parameters {
     use std::string::{Self as string, String};
-    // use std::option; // Implicit import
+    use std::option::{Self as option, Option};
     use sui::object::{ID, UID};
-    use sui::tx_context::{TxContext};
+    use sui::tx_context::TxContext;
     use sui::event;
-    use sui::table::{Self, Table};
+    use sui::table::{Self as table, Table};
     use sui::bcs;
-    use sui::clock::{Self, Clock};
-    use sui::math;
+    use sui::transfer;
 
     // =============== Constants ===============
     
@@ -126,11 +125,8 @@ module suiverse_core::parameters {
 
     // =============== Structs ===============
     
-    /// Enhanced system parameters storage with PoK features
-    public struct SystemParameters has key {
-        id: UID,
-        
-        // Economic Parameters
+    /// Economic parameters for deposits, fees, and bonuses
+    public struct EconomicParameters has store {
         quiz_creation_deposit: u64,
         article_deposit_original: u64,
         article_deposit_external: u64,
@@ -142,8 +138,10 @@ module suiverse_core::parameters {
         contact_purchase_fee: u64,
         proposal_deposit: u64,
         proposal_bonus: u64,
-        
-        // Validation Parameters
+    }
+    
+    /// Validation thresholds and validator counts
+    public struct ValidationParameters has store {
         article_approval_threshold: u8,
         project_approval_threshold: u8,
         quiz_approval_threshold: u8,
@@ -154,8 +152,10 @@ module suiverse_core::parameters {
         exam_validator_count: u8,
         validation_time_limit: u64,
         consensus_threshold: u8,
-        
-        // Content Reward Parameters
+    }
+    
+    /// Content reward and referral parameters
+    public struct RewardParameters has store {
         original_article_view_reward: u64,
         external_article_view_reward: u64,
         project_view_reward: u64,
@@ -166,66 +166,84 @@ module suiverse_core::parameters {
         completion_bonus_project: u64,
         contact_referral_rate: u64,
         certificate_royalty_rate: u64,
-        
-        // System Parameters
+    }
+    
+    /// System-level configuration parameters
+    public struct SystemParameters has store {
         epoch_duration: u64,
         max_proposals_per_user: u64,
         content_view_gas_cost: u64,
         min_certificates_for_validator: u64,
-
-        // Governance Parameters  
+    }
+    
+    /// Governance and voting parameters
+    public struct GovernanceParameters has store {
         voting_period: u64,
         execution_delay: u64,
         quorum_threshold: u64,
-        
-        // PoK Core Parameters
+    }
+    
+    /// Proof of Knowledge core parameters
+    public struct PoKCoreParameters has store {
         minimum_stake: u64,
         genesis_validator_count: u64,
         bootstrap_duration: u64,
         certificate_rebalance_interval: u64,
         validator_selection_algorithm: u8,
         max_validators_per_content: u8,
-        
-        // Certificate Value Parameters
+    }
+    
+    /// Certificate value and decay parameters
+    public struct CertificateParameters has store {
         certificate_base_value: u64,
         certificate_age_decay_monthly: u64,
         certificate_max_decay: u64,
         certificate_boost_multiplier: u64,
         scarcity_base_multiplier: u64,
         difficulty_base_multiplier: u64,
-        
-        // Slashing Parameters
+    }
+    
+    /// Slashing penalties and caps
+    public struct SlashingParameters has store {
         slash_lazy_validation: u64,
         slash_wrong_consensus: u64,
         slash_malicious_approval: u64,
         slash_collusion: u64,
         max_slash_cap: u64,
-        
-        // Weight Calculation Parameters
+    }
+    
+    /// Weight calculation factors
+    public struct WeightParameters has store {
         knowledge_weight_factor: u64,
         stake_weight_factor: u64,
         performance_weight_factor: u64,
         base_weight_divisor: u64,
+    }
+    
+    /// Main system parameters container with smaller sub-structs
+    public struct GlobalParameters has key {
+        id: UID,
         
-        // Stake Tier Configuration
+        // Parameter groups
+        economic: EconomicParameters,
+        validation: ValidationParameters,
+        rewards: RewardParameters,
+        system: SystemParameters,
+        governance: GovernanceParameters,
+        pok_core: PoKCoreParameters,
+        certificates: CertificateParameters,
+        slashing: SlashingParameters,
+        weights: WeightParameters,
+        
+        // Dynamic data tables
         stake_tiers: Table<u8, StakeTierConfig>,
-        
-        // Certificate Base Values by Type
         certificate_values: Table<String, u64>,
-        
-        // Parameter Access Control
         parameter_locks: Table<String, ParameterLock>,
-        
-        // Batch Update Tracking
         pending_batch_updates: Table<ID, BatchUpdate>,
-        
-        // Extended parameters table for future additions
         extended_params: Table<String, vector<u8>>,
-        
-        // Audit Trail
         parameter_history: Table<String, vector<ParameterChange>>,
         
-        // Version for upgrades
+        // Version tracking
         version: u64,
         last_major_update: u64,
     }
@@ -338,7 +356,7 @@ module suiverse_core::parameters {
     fun init(ctx: &mut TxContext) {
         let params = initialize_parameters(ctx);
         let params_address = object::uid_to_address(&params.id);
-        let bootstrap_end_time = params.bootstrap_duration;
+        let bootstrap_end_time = params.pok_core.bootstrap_duration;
         
         event::emit(ParametersInitialized {
             parameters_id: params_address,
@@ -352,86 +370,104 @@ module suiverse_core::parameters {
     // =============== Public Functions ===============
     
     /// Initialize enhanced system parameters with PoK defaults
-    public fun initialize_parameters(ctx: &mut TxContext): SystemParameters {
-        let mut params = SystemParameters {
+    public fun initialize_parameters(ctx: &mut TxContext): GlobalParameters {
+        let mut params = GlobalParameters {
             id: object::new(ctx),
             
             // Economic Parameters
-            quiz_creation_deposit: DEFAULT_QUIZ_CREATION_DEPOSIT,
-            article_deposit_original: DEFAULT_ARTICLE_DEPOSIT_ORIGINAL,
-            article_deposit_external: DEFAULT_ARTICLE_DEPOSIT_EXTERNAL,
-            project_deposit: DEFAULT_PROJECT_DEPOSIT,
-            exam_creation_deposit: DEFAULT_EXAM_CREATION_DEPOSIT,
-            exam_fee: DEFAULT_EXAM_FEE,
-            retry_fee: DEFAULT_RETRY_FEE,
-            skill_search_fee: DEFAULT_SKILL_SEARCH_FEE,
-            contact_purchase_fee: DEFAULT_CONTACT_PURCHASE_FEE,
-            proposal_deposit: DEFAULT_PROPOSAL_DEPOSIT,
-            proposal_bonus: DEFAULT_PROPOSAL_BONUS,
+            economic: EconomicParameters {
+                quiz_creation_deposit: DEFAULT_QUIZ_CREATION_DEPOSIT,
+                article_deposit_original: DEFAULT_ARTICLE_DEPOSIT_ORIGINAL,
+                article_deposit_external: DEFAULT_ARTICLE_DEPOSIT_EXTERNAL,
+                project_deposit: DEFAULT_PROJECT_DEPOSIT,
+                exam_creation_deposit: DEFAULT_EXAM_CREATION_DEPOSIT,
+                exam_fee: DEFAULT_EXAM_FEE,
+                retry_fee: DEFAULT_RETRY_FEE,
+                skill_search_fee: DEFAULT_SKILL_SEARCH_FEE,
+                contact_purchase_fee: DEFAULT_CONTACT_PURCHASE_FEE,
+                proposal_deposit: DEFAULT_PROPOSAL_DEPOSIT,
+                proposal_bonus: DEFAULT_PROPOSAL_BONUS,
+            },
             
             // Validation Parameters
-            article_approval_threshold: DEFAULT_ARTICLE_APPROVAL_THRESHOLD,
-            project_approval_threshold: DEFAULT_PROJECT_APPROVAL_THRESHOLD,
-            quiz_approval_threshold: DEFAULT_QUIZ_APPROVAL_THRESHOLD,
-            exam_approval_threshold: DEFAULT_EXAM_APPROVAL_THRESHOLD,
-            article_validator_count: DEFAULT_ARTICLE_VALIDATOR_COUNT,
-            project_validator_count: DEFAULT_PROJECT_VALIDATOR_COUNT,
-            quiz_validator_count: DEFAULT_QUIZ_VALIDATOR_COUNT,
-            exam_validator_count: DEFAULT_EXAM_VALIDATOR_COUNT,
-            validation_time_limit: DEFAULT_VALIDATION_TIME_LIMIT,
-            consensus_threshold: DEFAULT_CONSENSUS_THRESHOLD,
+            validation: ValidationParameters {
+                article_approval_threshold: DEFAULT_ARTICLE_APPROVAL_THRESHOLD,
+                project_approval_threshold: DEFAULT_PROJECT_APPROVAL_THRESHOLD,
+                quiz_approval_threshold: DEFAULT_QUIZ_APPROVAL_THRESHOLD,
+                exam_approval_threshold: DEFAULT_EXAM_APPROVAL_THRESHOLD,
+                article_validator_count: DEFAULT_ARTICLE_VALIDATOR_COUNT,
+                project_validator_count: DEFAULT_PROJECT_VALIDATOR_COUNT,
+                quiz_validator_count: DEFAULT_QUIZ_VALIDATOR_COUNT,
+                exam_validator_count: DEFAULT_EXAM_VALIDATOR_COUNT,
+                validation_time_limit: DEFAULT_VALIDATION_TIME_LIMIT,
+                consensus_threshold: DEFAULT_CONSENSUS_THRESHOLD,
+            },
             
             // Content Reward Parameters
-            original_article_view_reward: DEFAULT_ORIGINAL_ARTICLE_VIEW_REWARD,
-            external_article_view_reward: DEFAULT_EXTERNAL_ARTICLE_VIEW_REWARD,
-            project_view_reward: DEFAULT_PROJECT_VIEW_REWARD,
-            quiz_usage_reward: DEFAULT_QUIZ_USAGE_REWARD,
-            validator_review_reward: DEFAULT_VALIDATOR_REVIEW_REWARD,
-            quality_bonus_article: DEFAULT_QUALITY_BONUS_ARTICLE,
-            quality_bonus_quiz: DEFAULT_QUALITY_BONUS_QUIZ,
-            completion_bonus_project: DEFAULT_COMPLETION_BONUS_PROJECT,
-            contact_referral_rate: DEFAULT_CONTACT_REFERRAL_RATE,
-            certificate_royalty_rate: DEFAULT_CERTIFICATE_ROYALTY_RATE,
+            rewards: RewardParameters {
+                original_article_view_reward: DEFAULT_ORIGINAL_ARTICLE_VIEW_REWARD,
+                external_article_view_reward: DEFAULT_EXTERNAL_ARTICLE_VIEW_REWARD,
+                project_view_reward: DEFAULT_PROJECT_VIEW_REWARD,
+                quiz_usage_reward: DEFAULT_QUIZ_USAGE_REWARD,
+                validator_review_reward: DEFAULT_VALIDATOR_REVIEW_REWARD,
+                quality_bonus_article: DEFAULT_QUALITY_BONUS_ARTICLE,
+                quality_bonus_quiz: DEFAULT_QUALITY_BONUS_QUIZ,
+                completion_bonus_project: DEFAULT_COMPLETION_BONUS_PROJECT,
+                contact_referral_rate: DEFAULT_CONTACT_REFERRAL_RATE,
+                certificate_royalty_rate: DEFAULT_CERTIFICATE_ROYALTY_RATE,
+            },
             
             // System Parameters
-            epoch_duration: DEFAULT_EPOCH_DURATION,
-            max_proposals_per_user: DEFAULT_MAX_PROPOSALS_PER_USER,
-            content_view_gas_cost: DEFAULT_CONTENT_VIEW_GAS_COST,
-            min_certificates_for_validator: DEFAULT_MIN_CERTIFICATES_FOR_VALIDATOR,
+            system: SystemParameters {
+                epoch_duration: DEFAULT_EPOCH_DURATION,
+                max_proposals_per_user: DEFAULT_MAX_PROPOSALS_PER_USER,
+                content_view_gas_cost: DEFAULT_CONTENT_VIEW_GAS_COST,
+                min_certificates_for_validator: DEFAULT_MIN_CERTIFICATES_FOR_VALIDATOR,
+            },
 
             // Governance Parameters
-            voting_period: 604800000, // 7 days in ms
-            execution_delay: 86400000, // 24 hours in ms
-            quorum_threshold: 20, // 20% of total voting power
+            governance: GovernanceParameters {
+                voting_period: 604800000, // 7 days in ms
+                execution_delay: 86400000, // 24 hours in ms
+                quorum_threshold: 20, // 20% of total voting power
+            },
             
             // PoK Core Parameters
-            minimum_stake: DEFAULT_MINIMUM_STAKE,
-            genesis_validator_count: DEFAULT_GENESIS_VALIDATOR_COUNT,
-            bootstrap_duration: DEFAULT_BOOTSTRAP_DURATION,
-            certificate_rebalance_interval: DEFAULT_CERTIFICATE_REBALANCE_INTERVAL,
-            validator_selection_algorithm: DEFAULT_VALIDATOR_SELECTION_ALGORITHM,
-            max_validators_per_content: DEFAULT_MAX_VALIDATORS_PER_CONTENT,
+            pok_core: PoKCoreParameters {
+                minimum_stake: DEFAULT_MINIMUM_STAKE,
+                genesis_validator_count: DEFAULT_GENESIS_VALIDATOR_COUNT,
+                bootstrap_duration: DEFAULT_BOOTSTRAP_DURATION,
+                certificate_rebalance_interval: DEFAULT_CERTIFICATE_REBALANCE_INTERVAL,
+                validator_selection_algorithm: DEFAULT_VALIDATOR_SELECTION_ALGORITHM,
+                max_validators_per_content: DEFAULT_MAX_VALIDATORS_PER_CONTENT,
+            },
             
             // Certificate Value Parameters
-            certificate_base_value: DEFAULT_CERTIFICATE_BASE_VALUE,
-            certificate_age_decay_monthly: DEFAULT_CERTIFICATE_AGE_DECAY_MONTHLY,
-            certificate_max_decay: DEFAULT_CERTIFICATE_MAX_DECAY,
-            certificate_boost_multiplier: DEFAULT_CERTIFICATE_BOOST_MULTIPLIER,
-            scarcity_base_multiplier: DEFAULT_SCARCITY_BASE_MULTIPLIER,
-            difficulty_base_multiplier: DEFAULT_DIFFICULTY_BASE_MULTIPLIER,
+            certificates: CertificateParameters {
+                certificate_base_value: DEFAULT_CERTIFICATE_BASE_VALUE,
+                certificate_age_decay_monthly: DEFAULT_CERTIFICATE_AGE_DECAY_MONTHLY,
+                certificate_max_decay: DEFAULT_CERTIFICATE_MAX_DECAY,
+                certificate_boost_multiplier: DEFAULT_CERTIFICATE_BOOST_MULTIPLIER,
+                scarcity_base_multiplier: DEFAULT_SCARCITY_BASE_MULTIPLIER,
+                difficulty_base_multiplier: DEFAULT_DIFFICULTY_BASE_MULTIPLIER,
+            },
             
             // Slashing Parameters
-            slash_lazy_validation: DEFAULT_SLASH_LAZY_VALIDATION,
-            slash_wrong_consensus: DEFAULT_SLASH_WRONG_CONSENSUS,
-            slash_malicious_approval: DEFAULT_SLASH_MALICIOUS_APPROVAL,
-            slash_collusion: DEFAULT_SLASH_COLLUSION,
-            max_slash_cap: DEFAULT_MAX_SLASH_CAP,
+            slashing: SlashingParameters {
+                slash_lazy_validation: DEFAULT_SLASH_LAZY_VALIDATION,
+                slash_wrong_consensus: DEFAULT_SLASH_WRONG_CONSENSUS,
+                slash_malicious_approval: DEFAULT_SLASH_MALICIOUS_APPROVAL,
+                slash_collusion: DEFAULT_SLASH_COLLUSION,
+                max_slash_cap: DEFAULT_MAX_SLASH_CAP,
+            },
             
             // Weight Calculation Parameters
-            knowledge_weight_factor: DEFAULT_KNOWLEDGE_WEIGHT_FACTOR,
-            stake_weight_factor: DEFAULT_STAKE_WEIGHT_FACTOR,
-            performance_weight_factor: DEFAULT_PERFORMANCE_WEIGHT_FACTOR,
-            base_weight_divisor: DEFAULT_BASE_WEIGHT_DIVISOR,
+            weights: WeightParameters {
+                knowledge_weight_factor: DEFAULT_KNOWLEDGE_WEIGHT_FACTOR,
+                stake_weight_factor: DEFAULT_STAKE_WEIGHT_FACTOR,
+                performance_weight_factor: DEFAULT_PERFORMANCE_WEIGHT_FACTOR,
+                base_weight_divisor: DEFAULT_BASE_WEIGHT_DIVISOR,
+            },
             
             // Initialize tables
             stake_tiers: table::new(ctx),
@@ -455,7 +491,7 @@ module suiverse_core::parameters {
     }
     
     /// Initialize default stake tier configurations
-    fun initialize_default_stake_tiers(params: &mut SystemParameters) {
+    fun initialize_default_stake_tiers(params: &mut GlobalParameters) {
         // Starter tier
         table::add(&mut params.stake_tiers, STAKE_TIER_STARTER, StakeTierConfig {
             tier_name: string::utf8(b"Starter"),
@@ -518,7 +554,7 @@ module suiverse_core::parameters {
     }
     
     /// Initialize default certificate base values
-    fun initialize_default_certificate_values(params: &mut SystemParameters) {
+    fun initialize_default_certificate_values(params: &mut GlobalParameters) {
         // Blockchain Development certificates
         table::add(&mut params.certificate_values, string::utf8(b"Sui Developer"), 200);
         table::add(&mut params.certificate_values, string::utf8(b"Move Expert"), 300);
@@ -542,7 +578,7 @@ module suiverse_core::parameters {
     
     /// Update a parameter value (only callable by governance module)
     public(package) fun update_parameter(
-        params: &mut SystemParameters,
+        params: &mut GlobalParameters,
         key: String,
         value: vector<u8>,
         changed_by: address,
@@ -553,7 +589,7 @@ module suiverse_core::parameters {
     
     /// Update a parameter value with proposal tracking
     public(package) fun update_parameter_with_proposal(
-        params: &mut SystemParameters,
+        params: &mut GlobalParameters,
         key: String,
         value: vector<u8>,
         changed_by: address,
@@ -602,7 +638,7 @@ module suiverse_core::parameters {
     
     /// Update multiple parameters in a batch
     public(package) fun update_parameters_batch(
-        params: &mut SystemParameters,
+        params: &mut GlobalParameters,
         updates: vector<ParameterUpdate>,
         proposer: address,
         proposal_id: ID,
@@ -657,147 +693,147 @@ module suiverse_core::parameters {
     
     /// Internal parameter update function
     fun update_parameter_internal(
-        params: &mut SystemParameters,
+        params: &mut GlobalParameters,
         key: &String,
         value: &vector<u8>,
     ) {
-        let key_str = *string::bytes(key);
+        let key_str = *string::as_bytes(key);
         
         // Handle each parameter by key
         if (key_str == b"quiz_creation_deposit") {
-            params.quiz_creation_deposit = bcs::peel_u64(&mut bcs::new(*value));
+            params.economic.quiz_creation_deposit = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"article_deposit_original") {
-            params.article_deposit_original = bcs::peel_u64(&mut bcs::new(*value));
+            params.economic.article_deposit_original = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"article_deposit_external") {
-            params.article_deposit_external = bcs::peel_u64(&mut bcs::new(*value));
+            params.economic.article_deposit_external = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"project_deposit") {
-            params.project_deposit = bcs::peel_u64(&mut bcs::new(*value));
+            params.economic.project_deposit = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"exam_creation_deposit") {
-            params.exam_creation_deposit = bcs::peel_u64(&mut bcs::new(*value));
+            params.economic.exam_creation_deposit = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"exam_fee") {
-            params.exam_fee = bcs::peel_u64(&mut bcs::new(*value));
+            params.economic.exam_fee = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"retry_fee") {
-            params.retry_fee = bcs::peel_u64(&mut bcs::new(*value));
+            params.economic.retry_fee = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"skill_search_fee") {
-            params.skill_search_fee = bcs::peel_u64(&mut bcs::new(*value));
+            params.economic.skill_search_fee = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"contact_purchase_fee") {
-            params.contact_purchase_fee = bcs::peel_u64(&mut bcs::new(*value));
+            params.economic.contact_purchase_fee = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"proposal_deposit") {
-            params.proposal_deposit = bcs::peel_u64(&mut bcs::new(*value));
+            params.economic.proposal_deposit = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"proposal_bonus") {
-            params.proposal_bonus = bcs::peel_u64(&mut bcs::new(*value));
+            params.economic.proposal_bonus = bcs::peel_u64(&mut bcs::new(*value));
         
         // Validation parameters
         } else if (key_str == b"article_approval_threshold") {
-            params.article_approval_threshold = bcs::peel_u8(&mut bcs::new(*value));
+            params.validation.article_approval_threshold = bcs::peel_u8(&mut bcs::new(*value));
         } else if (key_str == b"project_approval_threshold") {
-            params.project_approval_threshold = bcs::peel_u8(&mut bcs::new(*value));
+            params.validation.project_approval_threshold = bcs::peel_u8(&mut bcs::new(*value));
         } else if (key_str == b"quiz_approval_threshold") {
-            params.quiz_approval_threshold = bcs::peel_u8(&mut bcs::new(*value));
+            params.validation.quiz_approval_threshold = bcs::peel_u8(&mut bcs::new(*value));
         } else if (key_str == b"exam_approval_threshold") {
-            params.exam_approval_threshold = bcs::peel_u8(&mut bcs::new(*value));
+            params.validation.exam_approval_threshold = bcs::peel_u8(&mut bcs::new(*value));
         } else if (key_str == b"article_validator_count") {
-            params.article_validator_count = bcs::peel_u8(&mut bcs::new(*value));
+            params.validation.article_validator_count = bcs::peel_u8(&mut bcs::new(*value));
         } else if (key_str == b"project_validator_count") {
-            params.project_validator_count = bcs::peel_u8(&mut bcs::new(*value));
+            params.validation.project_validator_count = bcs::peel_u8(&mut bcs::new(*value));
         } else if (key_str == b"quiz_validator_count") {
-            params.quiz_validator_count = bcs::peel_u8(&mut bcs::new(*value));
+            params.validation.quiz_validator_count = bcs::peel_u8(&mut bcs::new(*value));
         } else if (key_str == b"exam_validator_count") {
-            params.exam_validator_count = bcs::peel_u8(&mut bcs::new(*value));
+            params.validation.exam_validator_count = bcs::peel_u8(&mut bcs::new(*value));
         } else if (key_str == b"validation_time_limit") {
-            params.validation_time_limit = bcs::peel_u64(&mut bcs::new(*value));
+            params.validation.validation_time_limit = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"consensus_threshold") {
-            params.consensus_threshold = bcs::peel_u8(&mut bcs::new(*value));
+            params.validation.consensus_threshold = bcs::peel_u8(&mut bcs::new(*value));
         
         // Reward parameters
         } else if (key_str == b"original_article_view_reward") {
-            params.original_article_view_reward = bcs::peel_u64(&mut bcs::new(*value));
+            params.rewards.original_article_view_reward = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"external_article_view_reward") {
-            params.external_article_view_reward = bcs::peel_u64(&mut bcs::new(*value));
+            params.rewards.external_article_view_reward = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"project_view_reward") {
-            params.project_view_reward = bcs::peel_u64(&mut bcs::new(*value));
+            params.rewards.project_view_reward = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"quiz_usage_reward") {
-            params.quiz_usage_reward = bcs::peel_u64(&mut bcs::new(*value));
+            params.rewards.quiz_usage_reward = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"validator_review_reward") {
-            params.validator_review_reward = bcs::peel_u64(&mut bcs::new(*value));
+            params.rewards.validator_review_reward = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"quality_bonus_article") {
-            params.quality_bonus_article = bcs::peel_u64(&mut bcs::new(*value));
+            params.rewards.quality_bonus_article = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"quality_bonus_quiz") {
-            params.quality_bonus_quiz = bcs::peel_u64(&mut bcs::new(*value));
+            params.rewards.quality_bonus_quiz = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"completion_bonus_project") {
-            params.completion_bonus_project = bcs::peel_u64(&mut bcs::new(*value));
+            params.rewards.completion_bonus_project = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"contact_referral_rate") {
-            params.contact_referral_rate = bcs::peel_u64(&mut bcs::new(*value));
+            params.rewards.contact_referral_rate = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"certificate_royalty_rate") {
-            params.certificate_royalty_rate = bcs::peel_u64(&mut bcs::new(*value));
+            params.rewards.certificate_royalty_rate = bcs::peel_u64(&mut bcs::new(*value));
         
         // System parameters
         } else if (key_str == b"epoch_duration") {
-            params.epoch_duration = bcs::peel_u64(&mut bcs::new(*value));
+            params.system.epoch_duration = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"max_proposals_per_user") {
-            params.max_proposals_per_user = bcs::peel_u64(&mut bcs::new(*value));
+            params.system.max_proposals_per_user = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"content_view_gas_cost") {
-            params.content_view_gas_cost = bcs::peel_u64(&mut bcs::new(*value));
+            params.system.content_view_gas_cost = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"min_certificates_for_validator") {
-            params.min_certificates_for_validator = bcs::peel_u64(&mut bcs::new(*value));
+            params.system.min_certificates_for_validator = bcs::peel_u64(&mut bcs::new(*value));
         
         // Governance parameters
         } else if (key_str == b"voting_period") {
-            params.voting_period = bcs::peel_u64(&mut bcs::new(*value));
+            params.governance.voting_period = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"execution_delay") {
-            params.execution_delay = bcs::peel_u64(&mut bcs::new(*value));
+            params.governance.execution_delay = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"quorum_threshold") {
-            params.quorum_threshold = bcs::peel_u64(&mut bcs::new(*value));
+            params.governance.quorum_threshold = bcs::peel_u64(&mut bcs::new(*value));
         
         // PoK Core parameters
         } else if (key_str == b"minimum_stake") {
-            params.minimum_stake = bcs::peel_u64(&mut bcs::new(*value));
+            params.pok_core.minimum_stake = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"genesis_validator_count") {
-            params.genesis_validator_count = bcs::peel_u64(&mut bcs::new(*value));
+            params.pok_core.genesis_validator_count = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"bootstrap_duration") {
-            params.bootstrap_duration = bcs::peel_u64(&mut bcs::new(*value));
+            params.pok_core.bootstrap_duration = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"certificate_rebalance_interval") {
-            params.certificate_rebalance_interval = bcs::peel_u64(&mut bcs::new(*value));
+            params.pok_core.certificate_rebalance_interval = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"validator_selection_algorithm") {
-            params.validator_selection_algorithm = bcs::peel_u8(&mut bcs::new(*value));
+            params.pok_core.validator_selection_algorithm = bcs::peel_u8(&mut bcs::new(*value));
         } else if (key_str == b"max_validators_per_content") {
-            params.max_validators_per_content = bcs::peel_u8(&mut bcs::new(*value));
+            params.pok_core.max_validators_per_content = bcs::peel_u8(&mut bcs::new(*value));
         
         // Certificate value parameters
         } else if (key_str == b"certificate_base_value") {
-            params.certificate_base_value = bcs::peel_u64(&mut bcs::new(*value));
+            params.certificates.certificate_base_value = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"certificate_age_decay_monthly") {
-            params.certificate_age_decay_monthly = bcs::peel_u64(&mut bcs::new(*value));
+            params.certificates.certificate_age_decay_monthly = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"certificate_max_decay") {
-            params.certificate_max_decay = bcs::peel_u64(&mut bcs::new(*value));
+            params.certificates.certificate_max_decay = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"certificate_boost_multiplier") {
-            params.certificate_boost_multiplier = bcs::peel_u64(&mut bcs::new(*value));
+            params.certificates.certificate_boost_multiplier = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"scarcity_base_multiplier") {
-            params.scarcity_base_multiplier = bcs::peel_u64(&mut bcs::new(*value));
+            params.certificates.scarcity_base_multiplier = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"difficulty_base_multiplier") {
-            params.difficulty_base_multiplier = bcs::peel_u64(&mut bcs::new(*value));
+            params.certificates.difficulty_base_multiplier = bcs::peel_u64(&mut bcs::new(*value));
         
         // Slashing parameters
         } else if (key_str == b"slash_lazy_validation") {
-            params.slash_lazy_validation = bcs::peel_u64(&mut bcs::new(*value));
+            params.slashing.slash_lazy_validation = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"slash_wrong_consensus") {
-            params.slash_wrong_consensus = bcs::peel_u64(&mut bcs::new(*value));
+            params.slashing.slash_wrong_consensus = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"slash_malicious_approval") {
-            params.slash_malicious_approval = bcs::peel_u64(&mut bcs::new(*value));
+            params.slashing.slash_malicious_approval = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"slash_collusion") {
-            params.slash_collusion = bcs::peel_u64(&mut bcs::new(*value));
+            params.slashing.slash_collusion = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"max_slash_cap") {
-            params.max_slash_cap = bcs::peel_u64(&mut bcs::new(*value));
+            params.slashing.max_slash_cap = bcs::peel_u64(&mut bcs::new(*value));
         
         // Weight calculation parameters
         } else if (key_str == b"knowledge_weight_factor") {
-            params.knowledge_weight_factor = bcs::peel_u64(&mut bcs::new(*value));
+            params.weights.knowledge_weight_factor = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"stake_weight_factor") {
-            params.stake_weight_factor = bcs::peel_u64(&mut bcs::new(*value));
+            params.weights.stake_weight_factor = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"performance_weight_factor") {
-            params.performance_weight_factor = bcs::peel_u64(&mut bcs::new(*value));
+            params.weights.performance_weight_factor = bcs::peel_u64(&mut bcs::new(*value));
         } else if (key_str == b"base_weight_divisor") {
-            params.base_weight_divisor = bcs::peel_u64(&mut bcs::new(*value));
+            params.weights.base_weight_divisor = bcs::peel_u64(&mut bcs::new(*value));
         } else {
             // Handle extended parameters
             if (table::contains(&params.extended_params, *key)) {
@@ -809,31 +845,31 @@ module suiverse_core::parameters {
     }
     
     /// Get parameter value internally
-    fun get_parameter_internal(params: &SystemParameters, key: &String): vector<u8> {
-        let key_str = *string::bytes(key);
+    fun get_parameter_internal(params: &GlobalParameters, key: &String): vector<u8> {
+        let key_str = *string::as_bytes(key);
         
         if (key_str == b"quiz_creation_deposit") {
-            bcs::to_bytes(&params.quiz_creation_deposit)
+            bcs::to_bytes(&params.economic.quiz_creation_deposit)
         } else if (key_str == b"article_deposit_original") {
-            bcs::to_bytes(&params.article_deposit_original)
+            bcs::to_bytes(&params.economic.article_deposit_original)
         } else if (key_str == b"article_deposit_external") {
-            bcs::to_bytes(&params.article_deposit_external)
+            bcs::to_bytes(&params.economic.article_deposit_external)
         } else if (key_str == b"project_deposit") {
-            bcs::to_bytes(&params.project_deposit)
+            bcs::to_bytes(&params.economic.project_deposit)
         } else if (key_str == b"exam_creation_deposit") {
-            bcs::to_bytes(&params.exam_creation_deposit)
+            bcs::to_bytes(&params.economic.exam_creation_deposit)
         } else if (key_str == b"exam_fee") {
-            bcs::to_bytes(&params.exam_fee)
+            bcs::to_bytes(&params.economic.exam_fee)
         } else if (key_str == b"retry_fee") {
-            bcs::to_bytes(&params.retry_fee)
+            bcs::to_bytes(&params.economic.retry_fee)
         } else if (key_str == b"skill_search_fee") {
-            bcs::to_bytes(&params.skill_search_fee)
+            bcs::to_bytes(&params.economic.skill_search_fee)
         } else if (key_str == b"contact_purchase_fee") {
-            bcs::to_bytes(&params.contact_purchase_fee)
+            bcs::to_bytes(&params.economic.contact_purchase_fee)
         } else if (key_str == b"proposal_deposit") {
-            bcs::to_bytes(&params.proposal_deposit)
+            bcs::to_bytes(&params.economic.proposal_deposit)
         } else if (key_str == b"proposal_bonus") {
-            bcs::to_bytes(&params.proposal_bonus)
+            bcs::to_bytes(&params.economic.proposal_bonus)
         } else {
             *table::borrow(&params.extended_params, *key)
         }
@@ -842,109 +878,109 @@ module suiverse_core::parameters {
     // =============== Public Read Functions ===============
     
     /// Get a parameter value by key
-    public fun get_parameter(params: &SystemParameters, key: String): vector<u8> {
-        let key_str = *string::bytes(&key);
+    public fun get_parameter(params: &GlobalParameters, key: String): vector<u8> {
+        let key_str = *string::as_bytes(&key);
         
         if (key_str == b"quiz_creation_deposit") {
-            bcs::to_bytes(&params.quiz_creation_deposit)
+            bcs::to_bytes(&params.economic.quiz_creation_deposit)
         } else if (key_str == b"article_deposit_original") {
-            bcs::to_bytes(&params.article_deposit_original)
+            bcs::to_bytes(&params.economic.article_deposit_original)
         } else if (key_str == b"article_deposit_external") {
-            bcs::to_bytes(&params.article_deposit_external)
+            bcs::to_bytes(&params.economic.article_deposit_external)
         } else if (key_str == b"project_deposit") {
-            bcs::to_bytes(&params.project_deposit)
+            bcs::to_bytes(&params.economic.project_deposit)
         } else if (key_str == b"exam_creation_deposit") {
-            bcs::to_bytes(&params.exam_creation_deposit)
+            bcs::to_bytes(&params.economic.exam_creation_deposit)
         } else if (key_str == b"exam_fee") {
-            bcs::to_bytes(&params.exam_fee)
+            bcs::to_bytes(&params.economic.exam_fee)
         } else if (key_str == b"retry_fee") {
-            bcs::to_bytes(&params.retry_fee)
+            bcs::to_bytes(&params.economic.retry_fee)
         } else if (key_str == b"skill_search_fee") {
-            bcs::to_bytes(&params.skill_search_fee)
+            bcs::to_bytes(&params.economic.skill_search_fee)
         } else if (key_str == b"contact_purchase_fee") {
-            bcs::to_bytes(&params.contact_purchase_fee)
+            bcs::to_bytes(&params.economic.contact_purchase_fee)
         } else if (key_str == b"article_approval_threshold") {
-            bcs::to_bytes(&params.article_approval_threshold)
+            bcs::to_bytes(&params.validation.article_approval_threshold)
         } else if (key_str == b"project_approval_threshold") {
-            bcs::to_bytes(&params.project_approval_threshold)
+            bcs::to_bytes(&params.validation.project_approval_threshold)
         } else if (key_str == b"quiz_approval_threshold") {
-            bcs::to_bytes(&params.quiz_approval_threshold)
+            bcs::to_bytes(&params.validation.quiz_approval_threshold)
         } else if (key_str == b"exam_approval_threshold") {
-            bcs::to_bytes(&params.exam_approval_threshold)
+            bcs::to_bytes(&params.validation.exam_approval_threshold)
         } else if (key_str == b"article_validator_count") {
-            bcs::to_bytes(&params.article_validator_count)
+            bcs::to_bytes(&params.validation.article_validator_count)
         } else if (key_str == b"project_validator_count") {
-            bcs::to_bytes(&params.project_validator_count)
+            bcs::to_bytes(&params.validation.project_validator_count)
         } else if (key_str == b"quiz_validator_count") {
-            bcs::to_bytes(&params.quiz_validator_count)
+            bcs::to_bytes(&params.validation.quiz_validator_count)
         } else if (key_str == b"validation_time_limit") {
-            bcs::to_bytes(&params.validation_time_limit)
+            bcs::to_bytes(&params.validation.validation_time_limit)
         } else if (key_str == b"original_article_view_reward") {
-            bcs::to_bytes(&params.original_article_view_reward)
+            bcs::to_bytes(&params.rewards.original_article_view_reward)
         } else if (key_str == b"external_article_view_reward") {
-            bcs::to_bytes(&params.external_article_view_reward)
+            bcs::to_bytes(&params.rewards.external_article_view_reward)
         } else if (key_str == b"project_view_reward") {
-            bcs::to_bytes(&params.project_view_reward)
+            bcs::to_bytes(&params.rewards.project_view_reward)
         } else if (key_str == b"quiz_usage_reward") {
-            bcs::to_bytes(&params.quiz_usage_reward)
+            bcs::to_bytes(&params.rewards.quiz_usage_reward)
         } else if (key_str == b"validator_review_reward") {
-            bcs::to_bytes(&params.validator_review_reward)
+            bcs::to_bytes(&params.rewards.validator_review_reward)
         } else if (key_str == b"epoch_duration") {
-            bcs::to_bytes(&params.epoch_duration)
+            bcs::to_bytes(&params.system.epoch_duration)
         } else if (key_str == b"max_proposals_per_user") {
-            bcs::to_bytes(&params.max_proposals_per_user)
+            bcs::to_bytes(&params.system.max_proposals_per_user)
         } else if (key_str == b"content_view_gas_cost") {
-            bcs::to_bytes(&params.content_view_gas_cost)
+            bcs::to_bytes(&params.system.content_view_gas_cost)
         } else if (key_str == b"minimum_stake") {
-            bcs::to_bytes(&params.minimum_stake)
+            bcs::to_bytes(&params.pok_core.minimum_stake)
         } else if (key_str == b"min_certificates_for_validator") {
-            bcs::to_bytes(&params.min_certificates_for_validator)
+            bcs::to_bytes(&params.system.min_certificates_for_validator)
         } else if (key_str == b"voting_period") {
-            bcs::to_bytes(&params.voting_period)
+            bcs::to_bytes(&params.governance.voting_period)
         } else if (key_str == b"execution_delay") {
-            bcs::to_bytes(&params.execution_delay)
+            bcs::to_bytes(&params.governance.execution_delay)
         } else if (key_str == b"quorum_threshold") {
-            bcs::to_bytes(&params.quorum_threshold)
+            bcs::to_bytes(&params.governance.quorum_threshold)
         } else if (key_str == b"genesis_validator_count") {
-            bcs::to_bytes(&params.genesis_validator_count)
+            bcs::to_bytes(&params.pok_core.genesis_validator_count)
         } else if (key_str == b"bootstrap_duration") {
-            bcs::to_bytes(&params.bootstrap_duration)
+            bcs::to_bytes(&params.pok_core.bootstrap_duration)
         } else if (key_str == b"certificate_rebalance_interval") {
-            bcs::to_bytes(&params.certificate_rebalance_interval)
+            bcs::to_bytes(&params.pok_core.certificate_rebalance_interval)
         } else if (key_str == b"validator_selection_algorithm") {
-            bcs::to_bytes(&params.validator_selection_algorithm)
+            bcs::to_bytes(&params.pok_core.validator_selection_algorithm)
         } else if (key_str == b"max_validators_per_content") {
-            bcs::to_bytes(&params.max_validators_per_content)
+            bcs::to_bytes(&params.pok_core.max_validators_per_content)
         } else if (key_str == b"certificate_base_value") {
-            bcs::to_bytes(&params.certificate_base_value)
+            bcs::to_bytes(&params.certificates.certificate_base_value)
         } else if (key_str == b"certificate_age_decay_monthly") {
-            bcs::to_bytes(&params.certificate_age_decay_monthly)
+            bcs::to_bytes(&params.certificates.certificate_age_decay_monthly)
         } else if (key_str == b"certificate_max_decay") {
-            bcs::to_bytes(&params.certificate_max_decay)
+            bcs::to_bytes(&params.certificates.certificate_max_decay)
         } else if (key_str == b"certificate_boost_multiplier") {
-            bcs::to_bytes(&params.certificate_boost_multiplier)
+            bcs::to_bytes(&params.certificates.certificate_boost_multiplier)
         } else if (key_str == b"scarcity_base_multiplier") {
-            bcs::to_bytes(&params.scarcity_base_multiplier)
+            bcs::to_bytes(&params.certificates.scarcity_base_multiplier)
         } else if (key_str == b"difficulty_base_multiplier") {
-            bcs::to_bytes(&params.difficulty_base_multiplier)
+            bcs::to_bytes(&params.certificates.difficulty_base_multiplier)
         } else if (key_str == b"slash_lazy_validation") {
-            bcs::to_bytes(&params.slash_lazy_validation)
+            bcs::to_bytes(&params.slashing.slash_lazy_validation)
         } else if (key_str == b"slash_wrong_consensus") {
-            bcs::to_bytes(&params.slash_wrong_consensus)
+            bcs::to_bytes(&params.slashing.slash_wrong_consensus)
         } else if (key_str == b"slash_malicious_approval") {
-            bcs::to_bytes(&params.slash_malicious_approval)
+            bcs::to_bytes(&params.slashing.slash_malicious_approval)
         } else if (key_str == b"slash_collusion") {
-            bcs::to_bytes(&params.slash_collusion)
+            bcs::to_bytes(&params.slashing.slash_collusion)
         } else if (key_str == b"max_slash_cap") {
-            bcs::to_bytes(&params.max_slash_cap)
+            bcs::to_bytes(&params.slashing.max_slash_cap)
         } else if (key_str == b"knowledge_weight_factor") {
-            bcs::to_bytes(&params.knowledge_weight_factor)
+            bcs::to_bytes(&params.weights.knowledge_weight_factor)
         } else if (key_str == b"stake_weight_factor") {
-            bcs::to_bytes(&params.stake_weight_factor)
+            bcs::to_bytes(&params.weights.stake_weight_factor)
         } else if (key_str == b"performance_weight_factor") {
-            bcs::to_bytes(&params.performance_weight_factor)
+            bcs::to_bytes(&params.weights.performance_weight_factor)
         } else if (key_str == b"base_weight_divisor") {
-            bcs::to_bytes(&params.base_weight_divisor)
+            bcs::to_bytes(&params.weights.base_weight_divisor)
         } else {
             assert!(table::contains(&params.extended_params, key), E_PARAMETER_NOT_FOUND);
             *table::borrow(&params.extended_params, key)
@@ -952,271 +988,271 @@ module suiverse_core::parameters {
     }
 
     // Direct getter functions for commonly used parameters
-    public fun get_quiz_creation_deposit(params: &SystemParameters): u64 {
-        params.quiz_creation_deposit
+    public fun get_quiz_creation_deposit(params: &GlobalParameters): u64 {
+        params.economic.quiz_creation_deposit
     }
 
-    public fun get_article_deposit_original(params: &SystemParameters): u64 {
-        params.article_deposit_original
+    public fun get_article_deposit_original(params: &GlobalParameters): u64 {
+        params.economic.article_deposit_original
     }
 
-    public fun get_article_deposit_external(params: &SystemParameters): u64 {
-        params.article_deposit_external
+    public fun get_article_deposit_external(params: &GlobalParameters): u64 {
+        params.economic.article_deposit_external
     }
 
-    public fun get_project_deposit(params: &SystemParameters): u64 {
-        params.project_deposit
+    public fun get_project_deposit(params: &GlobalParameters): u64 {
+        params.economic.project_deposit
     }
 
-    public fun get_exam_creation_deposit(params: &SystemParameters): u64 {
-        params.exam_creation_deposit
+    public fun get_exam_creation_deposit(params: &GlobalParameters): u64 {
+        params.economic.exam_creation_deposit
     }
 
-    public fun get_exam_fee(params: &SystemParameters): u64 {
-        params.exam_fee
+    public fun get_exam_fee(params: &GlobalParameters): u64 {
+        params.economic.exam_fee
     }
 
-    public fun get_retry_fee(params: &SystemParameters): u64 {
-        params.retry_fee
+    public fun get_retry_fee(params: &GlobalParameters): u64 {
+        params.economic.retry_fee
     }
 
-    public fun get_skill_search_fee(params: &SystemParameters): u64 {
-        params.skill_search_fee
+    public fun get_skill_search_fee(params: &GlobalParameters): u64 {
+        params.economic.skill_search_fee
     }
 
-    public fun get_contact_purchase_fee(params: &SystemParameters): u64 {
-        params.contact_purchase_fee
+    public fun get_contact_purchase_fee(params: &GlobalParameters): u64 {
+        params.economic.contact_purchase_fee
     }
 
-    public fun get_article_approval_threshold(params: &SystemParameters): u8 {
-        params.article_approval_threshold
+    public fun get_article_approval_threshold(params: &GlobalParameters): u8 {
+        params.validation.article_approval_threshold
     }
 
-    public fun get_project_approval_threshold(params: &SystemParameters): u8 {
-        params.project_approval_threshold
+    public fun get_project_approval_threshold(params: &GlobalParameters): u8 {
+        params.validation.project_approval_threshold
     }
 
-    public fun get_quiz_approval_threshold(params: &SystemParameters): u8 {
-        params.quiz_approval_threshold
+    public fun get_quiz_approval_threshold(params: &GlobalParameters): u8 {
+        params.validation.quiz_approval_threshold
     }
 
-    public fun get_exam_approval_threshold(params: &SystemParameters): u8 {
-        params.exam_approval_threshold
+    public fun get_exam_approval_threshold(params: &GlobalParameters): u8 {
+        params.validation.exam_approval_threshold
     }
 
-    public fun get_article_validator_count(params: &SystemParameters): u8 {
-        params.article_validator_count
+    public fun get_article_validator_count(params: &GlobalParameters): u8 {
+        params.validation.article_validator_count
     }
 
-    public fun get_project_validator_count(params: &SystemParameters): u8 {
-        params.project_validator_count
+    public fun get_project_validator_count(params: &GlobalParameters): u8 {
+        params.validation.project_validator_count
     }
 
-    public fun get_quiz_validator_count(params: &SystemParameters): u8 {
-        params.quiz_validator_count
+    public fun get_quiz_validator_count(params: &GlobalParameters): u8 {
+        params.validation.quiz_validator_count
     }
 
-    public fun get_validation_time_limit(params: &SystemParameters): u64 {
-        params.validation_time_limit
+    public fun get_validation_time_limit(params: &GlobalParameters): u64 {
+        params.validation.validation_time_limit
     }
 
-    public fun get_original_article_view_reward(params: &SystemParameters): u64 {
-        params.original_article_view_reward
+    public fun get_original_article_view_reward(params: &GlobalParameters): u64 {
+        params.rewards.original_article_view_reward
     }
 
-    public fun get_external_article_view_reward(params: &SystemParameters): u64 {
-        params.external_article_view_reward
+    public fun get_external_article_view_reward(params: &GlobalParameters): u64 {
+        params.rewards.external_article_view_reward
     }
 
-    public fun get_project_view_reward(params: &SystemParameters): u64 {
-        params.project_view_reward
+    public fun get_project_view_reward(params: &GlobalParameters): u64 {
+        params.rewards.project_view_reward
     }
 
-    public fun get_quiz_usage_reward(params: &SystemParameters): u64 {
-        params.quiz_usage_reward
+    public fun get_quiz_usage_reward(params: &GlobalParameters): u64 {
+        params.rewards.quiz_usage_reward
     }
 
-    public fun get_validator_review_reward(params: &SystemParameters): u64 {
-        params.validator_review_reward
+    public fun get_validator_review_reward(params: &GlobalParameters): u64 {
+        params.rewards.validator_review_reward
     }
 
-    public fun get_epoch_duration(params: &SystemParameters): u64 {
-        params.epoch_duration
+    public fun get_epoch_duration(params: &GlobalParameters): u64 {
+        params.system.epoch_duration
     }
 
-    public fun get_max_proposals_per_user(params: &SystemParameters): u64 {
-        params.max_proposals_per_user
+    public fun get_max_proposals_per_user(params: &GlobalParameters): u64 {
+        params.system.max_proposals_per_user
     }
 
-    public fun get_content_view_gas_cost(params: &SystemParameters): u64 {
-        params.content_view_gas_cost
+    public fun get_content_view_gas_cost(params: &GlobalParameters): u64 {
+        params.system.content_view_gas_cost
     }
 
-    public fun get_minimum_stake(params: &SystemParameters): u64 {
-        params.minimum_stake
+    public fun get_minimum_stake(params: &GlobalParameters): u64 {
+        params.pok_core.minimum_stake
     }
 
-    public fun get_min_certificates_for_validator(params: &SystemParameters): u64 {
-        params.min_certificates_for_validator
+    public fun get_min_certificates_for_validator(params: &GlobalParameters): u64 {
+        params.system.min_certificates_for_validator
     }
 
-    public fun get_voting_period(params: &SystemParameters): u64 {
-        params.voting_period
+    public fun get_voting_period(params: &GlobalParameters): u64 {
+        params.governance.voting_period
     }
 
-    public fun get_execution_delay(params: &SystemParameters): u64 {
-        params.execution_delay
+    public fun get_execution_delay(params: &GlobalParameters): u64 {
+        params.governance.execution_delay
     }
 
-    public fun get_quorum_threshold(params: &SystemParameters): u64 {
-        params.quorum_threshold
+    public fun get_quorum_threshold(params: &GlobalParameters): u64 {
+        params.governance.quorum_threshold
     }
 
-    public fun get_version(params: &SystemParameters): u64 {
+    public fun get_version(params: &GlobalParameters): u64 {
         params.version
     }
 
     // =============== PoK-specific Parameter Getters ===============
     
-    public fun get_genesis_validator_count(params: &SystemParameters): u64 {
-        params.genesis_validator_count
+    public fun get_genesis_validator_count(params: &GlobalParameters): u64 {
+        params.pok_core.genesis_validator_count
     }
 
-    public fun get_bootstrap_duration(params: &SystemParameters): u64 {
-        params.bootstrap_duration
+    public fun get_bootstrap_duration(params: &GlobalParameters): u64 {
+        params.pok_core.bootstrap_duration
     }
 
-    public fun get_certificate_rebalance_interval(params: &SystemParameters): u64 {
-        params.certificate_rebalance_interval
+    public fun get_certificate_rebalance_interval(params: &GlobalParameters): u64 {
+        params.pok_core.certificate_rebalance_interval
     }
 
-    public fun get_validator_selection_algorithm(params: &SystemParameters): u8 {
-        params.validator_selection_algorithm
+    public fun get_validator_selection_algorithm(params: &GlobalParameters): u8 {
+        params.pok_core.validator_selection_algorithm
     }
 
-    public fun get_max_validators_per_content(params: &SystemParameters): u8 {
-        params.max_validators_per_content
+    public fun get_max_validators_per_content(params: &GlobalParameters): u8 {
+        params.pok_core.max_validators_per_content
     }
 
-    public fun get_certificate_base_value(params: &SystemParameters): u64 {
-        params.certificate_base_value
+    public fun get_certificate_base_value(params: &GlobalParameters): u64 {
+        params.certificates.certificate_base_value
     }
 
-    public fun get_certificate_age_decay_monthly(params: &SystemParameters): u64 {
-        params.certificate_age_decay_monthly
+    public fun get_certificate_age_decay_monthly(params: &GlobalParameters): u64 {
+        params.certificates.certificate_age_decay_monthly
     }
 
-    public fun get_certificate_max_decay(params: &SystemParameters): u64 {
-        params.certificate_max_decay
+    public fun get_certificate_max_decay(params: &GlobalParameters): u64 {
+        params.certificates.certificate_max_decay
     }
 
-    public fun get_certificate_boost_multiplier(params: &SystemParameters): u64 {
-        params.certificate_boost_multiplier
+    public fun get_certificate_boost_multiplier(params: &GlobalParameters): u64 {
+        params.certificates.certificate_boost_multiplier
     }
 
-    public fun get_scarcity_base_multiplier(params: &SystemParameters): u64 {
-        params.scarcity_base_multiplier
+    public fun get_scarcity_base_multiplier(params: &GlobalParameters): u64 {
+        params.certificates.scarcity_base_multiplier
     }
 
-    public fun get_difficulty_base_multiplier(params: &SystemParameters): u64 {
-        params.difficulty_base_multiplier
+    public fun get_difficulty_base_multiplier(params: &GlobalParameters): u64 {
+        params.certificates.difficulty_base_multiplier
     }
 
-    public fun get_slash_lazy_validation(params: &SystemParameters): u64 {
-        params.slash_lazy_validation
+    public fun get_slash_lazy_validation(params: &GlobalParameters): u64 {
+        params.slashing.slash_lazy_validation
     }
 
-    public fun get_slash_wrong_consensus(params: &SystemParameters): u64 {
-        params.slash_wrong_consensus
+    public fun get_slash_wrong_consensus(params: &GlobalParameters): u64 {
+        params.slashing.slash_wrong_consensus
     }
 
-    public fun get_slash_malicious_approval(params: &SystemParameters): u64 {
-        params.slash_malicious_approval
+    public fun get_slash_malicious_approval(params: &GlobalParameters): u64 {
+        params.slashing.slash_malicious_approval
     }
 
-    public fun get_slash_collusion(params: &SystemParameters): u64 {
-        params.slash_collusion
+    public fun get_slash_collusion(params: &GlobalParameters): u64 {
+        params.slashing.slash_collusion
     }
 
-    public fun get_max_slash_cap(params: &SystemParameters): u64 {
-        params.max_slash_cap
+    public fun get_max_slash_cap(params: &GlobalParameters): u64 {
+        params.slashing.max_slash_cap
     }
 
-    public fun get_knowledge_weight_factor(params: &SystemParameters): u64 {
-        params.knowledge_weight_factor
+    public fun get_knowledge_weight_factor(params: &GlobalParameters): u64 {
+        params.weights.knowledge_weight_factor
     }
 
-    public fun get_stake_weight_factor(params: &SystemParameters): u64 {
-        params.stake_weight_factor
+    public fun get_stake_weight_factor(params: &GlobalParameters): u64 {
+        params.weights.stake_weight_factor
     }
 
-    public fun get_performance_weight_factor(params: &SystemParameters): u64 {
-        params.performance_weight_factor
+    public fun get_performance_weight_factor(params: &GlobalParameters): u64 {
+        params.weights.performance_weight_factor
     }
 
-    public fun get_base_weight_divisor(params: &SystemParameters): u64 {
-        params.base_weight_divisor
+    public fun get_base_weight_divisor(params: &GlobalParameters): u64 {
+        params.weights.base_weight_divisor
     }
 
-    public fun get_proposal_deposit(params: &SystemParameters): u64 {
-        params.proposal_deposit
+    public fun get_proposal_deposit(params: &GlobalParameters): u64 {
+        params.economic.proposal_deposit
     }
 
-    public fun get_proposal_bonus(params: &SystemParameters): u64 {
-        params.proposal_bonus
+    public fun get_proposal_bonus(params: &GlobalParameters): u64 {
+        params.economic.proposal_bonus
     }
 
-    public fun get_consensus_threshold(params: &SystemParameters): u8 {
-        params.consensus_threshold
+    public fun get_consensus_threshold(params: &GlobalParameters): u8 {
+        params.validation.consensus_threshold
     }
 
-    public fun get_exam_validator_count(params: &SystemParameters): u8 {
-        params.exam_validator_count
+    public fun get_exam_validator_count(params: &GlobalParameters): u8 {
+        params.validation.exam_validator_count
     }
 
-    public fun get_quality_bonus_article(params: &SystemParameters): u64 {
-        params.quality_bonus_article
+    public fun get_quality_bonus_article(params: &GlobalParameters): u64 {
+        params.rewards.quality_bonus_article
     }
 
-    public fun get_quality_bonus_quiz(params: &SystemParameters): u64 {
-        params.quality_bonus_quiz
+    public fun get_quality_bonus_quiz(params: &GlobalParameters): u64 {
+        params.rewards.quality_bonus_quiz
     }
 
-    public fun get_completion_bonus_project(params: &SystemParameters): u64 {
-        params.completion_bonus_project
+    public fun get_completion_bonus_project(params: &GlobalParameters): u64 {
+        params.rewards.completion_bonus_project
     }
 
-    public fun get_contact_referral_rate(params: &SystemParameters): u64 {
-        params.contact_referral_rate
+    public fun get_contact_referral_rate(params: &GlobalParameters): u64 {
+        params.rewards.contact_referral_rate
     }
 
-    public fun get_certificate_royalty_rate(params: &SystemParameters): u64 {
-        params.certificate_royalty_rate
+    public fun get_certificate_royalty_rate(params: &GlobalParameters): u64 {
+        params.rewards.certificate_royalty_rate
     }
 
     // =============== Stake Tier Functions ===============
     
     /// Get stake tier configuration
-    public fun get_stake_tier_config(params: &SystemParameters, tier: u8): &StakeTierConfig {
+    public fun get_stake_tier_config(params: &GlobalParameters, tier: u8): &StakeTierConfig {
         table::borrow(&params.stake_tiers, tier)
     }
 
     /// Check if stake tier exists
-    public fun has_stake_tier(params: &SystemParameters, tier: u8): bool {
+    public fun has_stake_tier(params: &GlobalParameters, tier: u8): bool {
         table::contains(&params.stake_tiers, tier)
     }
 
     /// Get certificate value by type
-    public fun get_certificate_value(params: &SystemParameters, cert_type: String): u64 {
+    public fun get_certificate_value(params: &GlobalParameters, cert_type: String): u64 {
         if (table::contains(&params.certificate_values, cert_type)) {
             *table::borrow(&params.certificate_values, cert_type)
         } else {
-            params.certificate_base_value // Default base value
+            params.certificates.certificate_base_value // Default base value
         }
     }
 
     /// Check if certificate type has custom value
-    public fun has_certificate_value(params: &SystemParameters, cert_type: String): bool {
+    public fun has_certificate_value(params: &GlobalParameters, cert_type: String): bool {
         table::contains(&params.certificate_values, cert_type)
     }
 
@@ -1224,7 +1260,7 @@ module suiverse_core::parameters {
     
     /// Add a new extended parameter (for future extensibility)
     public(package) fun add_extended_parameter(
-        params: &mut SystemParameters,
+        params: &mut GlobalParameters,
         key: String,
         value: vector<u8>,
     ) {
@@ -1233,13 +1269,13 @@ module suiverse_core::parameters {
     }
 
     /// Update system version
-    public(package) fun update_version(params: &mut SystemParameters, new_version: u64) {
+    public(package) fun update_version(params: &mut GlobalParameters, new_version: u64) {
         params.version = new_version;
     }
 
     /// Update stake tier configuration
     public(package) fun update_stake_tier(
-        params: &mut SystemParameters,
+        params: &mut GlobalParameters,
         tier: u8,
         config: StakeTierConfig,
         updated_by: address,
@@ -1277,7 +1313,7 @@ module suiverse_core::parameters {
 
     /// Update certificate base value
     public(package) fun update_certificate_value(
-        params: &mut SystemParameters,
+        params: &mut GlobalParameters,
         cert_type: String,
         value: u64,
         updated_by: address,
@@ -1288,7 +1324,7 @@ module suiverse_core::parameters {
         let old_value = if (table::contains(&params.certificate_values, cert_type)) {
             *table::borrow(&params.certificate_values, cert_type)
         } else {
-            params.certificate_base_value
+            params.certificates.certificate_base_value
         };
 
         if (table::contains(&params.certificate_values, cert_type)) {
@@ -1308,7 +1344,7 @@ module suiverse_core::parameters {
 
     /// Lock a parameter (emergency use)
     public(package) fun lock_parameter(
-        params: &mut SystemParameters,
+        params: &mut GlobalParameters,
         key: String,
         lock_type: u8,
         locked_until: Option<u64>,
@@ -1339,7 +1375,7 @@ module suiverse_core::parameters {
 
     /// Unlock a parameter
     public(package) fun unlock_parameter(
-        params: &mut SystemParameters,
+        params: &mut GlobalParameters,
         key: String,
         unlocked_by: address,
         timestamp: u64,
@@ -1365,7 +1401,7 @@ module suiverse_core::parameters {
     
     /// Get parameter category by key
     public fun get_parameter_category(key: String): u8 {
-        let key_str = *string::bytes(&key);
+        let key_str = *string::as_bytes(&key);
         
         if (key_str == b"quiz_creation_deposit" || 
             key_str == b"article_deposit_original" ||
@@ -1409,7 +1445,7 @@ module suiverse_core::parameters {
 
     /// Validate parameter value range
     public fun validate_parameter_value(key: String, value: vector<u8>): bool {
-        let key_str = *string::bytes(&key);
+        let key_str = *string::as_bytes(&key);
         
         // Validate threshold parameters (must be <= 100)
         if (key_str == b"article_approval_threshold" ||
@@ -1435,7 +1471,7 @@ module suiverse_core::parameters {
     }
 
     /// Check if parameter is locked
-    fun is_parameter_locked(params: &SystemParameters, key: &String, current_time: u64): bool {
+    fun is_parameter_locked(params: &GlobalParameters, key: &String, current_time: u64): bool {
         if (!table::contains(&params.parameter_locks, *key)) {
             return false
         };
@@ -1455,7 +1491,7 @@ module suiverse_core::parameters {
 
     /// Calculate impact level of parameter change
     fun calculate_impact_level(key: &String): u8 {
-        let key_str = *string::bytes(key);
+        let key_str = *string::as_bytes(key);
         
         // Critical impact (4) - affects security or fundamental economics
         if (key_str == b"minimum_stake" ||
@@ -1482,7 +1518,7 @@ module suiverse_core::parameters {
     }
 
     /// Add parameter change to history
-    fun add_parameter_history(params: &mut SystemParameters, key: &String, change: ParameterChange) {
+    fun add_parameter_history(params: &mut GlobalParameters, key: &String, change: ParameterChange) {
         if (!table::contains(&params.parameter_history, *key)) {
             table::add(&mut params.parameter_history, *key, vector::empty());
         };

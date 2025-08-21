@@ -17,11 +17,13 @@ module suiverse_economics::economics_integration {
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
     use sui::vec_map::{Self, VecMap};
+    use sui::package::{Self, UpgradeCap, UpgradeTicket, UpgradeReceipt};
+    use std::option::{Self, Option};
 
     // Integration with existing modules
-    use suiverse::certificate_market;
-    use suiverse::learning_incentives;
-    use suiverse::dynamic_fees;
+    use suiverse_economics::certificate_market;
+    use suiverse_economics::learning_incentives;
+    use suiverse_economics::dynamic_fees;
 
     // === Constants ===
     const POLICY_UPDATE_COOLDOWN: u64 = 86400000; // 24 hours in milliseconds
@@ -33,6 +35,12 @@ module suiverse_economics::economics_integration {
     const ECONOMIC_EMERGENCY_THRESHOLD: u64 = 30; // 30% health triggers emergency
     const CROSS_MODULE_FEE_SHARE: u64 = 250; // 2.5% cross-module fee
     const ANALYTICS_UPDATE_INTERVAL: u64 = 3600000; // 1 hour
+    
+    // === Upgrade Constants ===
+    const CURRENT_VERSION: u64 = 1;
+    const UPGRADE_COOLDOWN: u64 = 604800000; // 7 days in milliseconds
+    const MAX_UPGRADES_PER_MONTH: u64 = 2;
+    const MIGRATION_GRACE_PERIOD: u64 = 2592000000; // 30 days in milliseconds
 
     // === Error Codes ===
     const E_POLICY_COOLDOWN_ACTIVE: u64 = 1;
@@ -45,6 +53,15 @@ module suiverse_economics::economics_integration {
     const E_CROSS_MODULE_VIOLATION: u64 = 8;
     const E_INVALID_INTEGRATION_STATE: u64 = 9;
     const E_ANALYTICS_UPDATE_TOO_FREQUENT: u64 = 10;
+    
+    // === Upgrade Error Codes ===
+    const E_NOT_AUTHORIZED_UPGRADER: u64 = 20;
+    const E_INVALID_VERSION: u64 = 21;
+    const E_UPGRADE_NOT_READY: u64 = 22;
+    const E_UPGRADE_COOLDOWN_ACTIVE: u64 = 23;
+    const E_VERSION_INCOMPATIBLE: u64 = 24;
+    const E_MIGRATION_NOT_COMPLETE: u64 = 25;
+    const E_UPGRADE_LIMIT_EXCEEDED: u64 = 26;
 
     // === Structs ===
 

@@ -11,7 +11,7 @@ module suiverse_content::articles {
     use sui::clock::{Self, Clock};
     
     // Dependencies
-    use suiverse_core::parameters::{Self, SystemParameters};
+    use suiverse_core::parameters::{Self, GlobalParameters};
     use suiverse_content::validation::{ValidationReview};
 
     // =============== Constants ===============
@@ -227,7 +227,7 @@ module suiverse_content::articles {
     // =============== Public Entry Functions ===============
     
     /// Create an original article
-    public entry fun create_original_article(
+    public fun create_original_article(
         title: String,
         content_hash: vector<u8>,
         tags: vector<ID>,
@@ -238,7 +238,7 @@ module suiverse_content::articles {
         preview: String,
         cover_image: Option<String>,
         deposit: Coin<SUI>,
-        params: &SystemParameters,
+        params: &GlobalParameters,
         stats: &mut ArticleStats,
         clock: &Clock,
         ctx: &mut TxContext,
@@ -321,7 +321,7 @@ module suiverse_content::articles {
     }
 
     /// Create an external article recommendation
-    public entry fun create_external_article(
+    public fun create_external_article(
         title: String,
         url: String,
         description: String,
@@ -330,7 +330,7 @@ module suiverse_content::articles {
         preview_image: Option<String>,
         author_name: Option<String>,
         deposit: Coin<SUI>,
-        params: &SystemParameters,
+        params: &GlobalParameters,
         stats: &mut ArticleStats,
         clock: &Clock,
         ctx: &mut TxContext,

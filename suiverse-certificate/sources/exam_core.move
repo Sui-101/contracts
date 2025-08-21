@@ -10,7 +10,7 @@
 /// - Exam activation when quiz threshold is met
 /// - Integration with session management and analytics
 /// - Certificate generation coordination
-module suiverse_economics::exam_core {
+module suiverse_certificate::exam_core {
     use std::string::{Self as string, String};
     // use std::option; // Implicit import
     use sui::object;

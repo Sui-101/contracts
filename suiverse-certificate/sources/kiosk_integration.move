@@ -1,7 +1,7 @@
 /// Enhanced Kiosk Integration Module for SuiVerse
 /// Provides comprehensive NFT marketplace integration for certificates
 /// Implements trading, royalties, and display functionality using Sui's Kiosk framework
-module suiverse_economics::kiosk_integration {
+module suiverse_certificate::kiosk_integration {
     use std::string::{Self, String};
     use std::option::{Self, Option};
     use std::vector;
@@ -23,7 +23,7 @@ module suiverse_economics::kiosk_integration {
     use sui::address;
     use sui::bcs;
     use sui::url::{Self, Url};
-    use suiverse_economics::certificates::{Self, CertificateNFT};
+    use suiverse_certificate::certificates::{Self, CertificateNFT};
     use suiverse_core::treasury;
 
     // =============== Error Constants ===============

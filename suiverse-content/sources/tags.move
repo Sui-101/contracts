@@ -453,7 +453,7 @@ module suiverse_content::tags {
     fun normalize_tag_name(name: &String): String {
         // Convert to lowercase and remove spaces
         // This is a simplified version - in production would need proper normalization
-        let bytes = string::bytes(name);
+        let bytes = string::as_bytes(name);
         let mut normalized_bytes = vector::empty<u8>();
         
         let mut i = 0;

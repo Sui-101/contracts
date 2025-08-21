@@ -1,7 +1,7 @@
 /// Certificate Registry Module for SuiVerse
 /// Provides global certificate registry, verification, and lookup services
 /// Implements comprehensive tracking and analytics for all certificates
-module suiverse_economics::registry {
+module suiverse_certificate::registry {
     use std::string::{Self, String};
     use std::option::{Self, Option};
     use std::vector;
@@ -16,7 +16,7 @@ module suiverse_economics::registry {
     use sui::sui::SUI;
     use sui::balance::{Self, Balance};
     use sui::hash;
-    use suiverse_economics::certificates::{Self, CertificateNFT};
+    use suiverse_certificate::certificates::{Self, CertificateNFT};
 
     // =============== Error Constants ===============
     const E_NOT_AUTHORIZED: u64 = 11001;
