@@ -775,6 +775,9 @@ module suiverse_core::governance {
         add_treasury(registry, treasury, admin_cap, ctx);
         add_global_parameters(registry, global_parameters, admin_cap, ctx);
         
+        // Mark registry as fully configured
+        registry.is_configured = true;
+        
         // Update last updated timestamp
         registry.last_updated = clock::timestamp_ms(clock);
         
