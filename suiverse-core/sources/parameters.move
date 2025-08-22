@@ -221,7 +221,7 @@ module suiverse_core::parameters {
     }
     
     /// Main system parameters container with smaller sub-structs
-    public struct GlobalParameters has key {
+    public struct GlobalParameters has key, store {
         id: UID,
         
         // Parameter groups

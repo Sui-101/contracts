@@ -97,7 +97,7 @@ module suiverse_core::treasury {
     // =============== Structs ===============
     
     /// Comprehensive treasury vault with advanced features
-    public struct Treasury has key {
+    public struct Treasury has key, store {
         id: UID,
         
         // Core Balance Management
