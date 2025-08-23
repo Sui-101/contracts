@@ -12,8 +12,8 @@ module suiverse_economics::rewards {
     use sui::transfer;
     use suiverse_core::parameters::{Self, SystemParameters};
     use suiverse_core::treasury::{Self, Treasury};
-    use suiverse_content::validation::{Self, ValidationSession};
-    use suiverse_core::governance::{Self, ValidatorRegistry};
+    // use suiverse_content::validation::{Self, ValidationSession}; // Commented out - causing compilation issues
+    use suiverse_core::governance::{Self, ValidatorPool};
 
     // =============== Constants ===============
     const E_NOT_AUTHORIZED: u64 = 15001;

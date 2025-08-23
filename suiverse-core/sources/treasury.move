@@ -179,7 +179,7 @@ module suiverse_core::treasury {
     }
 
     /// Staking position for reward calculation
-    public struct StakingPosition has store {
+    public struct StakingPosition has store, drop {
         staker: address,
         amount: u64,
         start_epoch: u64,
@@ -795,7 +795,7 @@ module suiverse_core::treasury {
         treasury.total_rewards_distributed = treasury.total_rewards_distributed + amount;
         
         // Update daily withdrawal tracking
-        update_daily_withdrawal_tracking(treasury, POOL_REWARDS, amount, clock);
+        update_daily_withdrawal_tracking(treasury, amount, clock);
         
         // Record transaction
         record_treasury_transaction(
@@ -862,7 +862,7 @@ module suiverse_core::treasury {
         vector::push_back(&mut pool.withdrawal_history, withdrawal_record);
         
         treasury.total_withdrawals = treasury.total_withdrawals + total_amount;
-        update_daily_withdrawal_tracking(treasury, POOL_VALIDATION, total_amount, clock);
+        update_daily_withdrawal_tracking(treasury, total_amount, clock);
         
         event::emit(RewardDistributed {
             recipient,
@@ -1129,7 +1129,7 @@ module suiverse_core::treasury {
         target_allocations: vector<u64>, // New allocation percentages
         pool_types: vector<u8>,
         clock: &Clock,
-        ctx: &mut TxContext,
+        _ctx: &mut TxContext,
     ) {
         assert!(admin_cap.admin_level >= 2, E_NOT_AUTHORIZED);
         assert!(vector::length(&target_allocations) == vector::length(&pool_types), E_INVALID_ALLOCATION);
@@ -1308,12 +1308,147 @@ module suiverse_core::treasury {
 
     // =============== Economic Mechanism Functions ===============
     
+    /// Create staking position for validator (called from governance module)
+    public fun create_validator_staking_position(
+        treasury: &mut Treasury,
+        validator_address: address,
+        stake_amount: u64,
+        ctx: &mut TxContext,
+    ) {
+        // Allow updating existing staking position or creating new one
+        // This handles both genesis validators and regular validators
+        if (table::contains(&treasury.staking_pools, validator_address)) {
+            // Update existing position
+            update_staking_position_stake(treasury, validator_address, stake_amount, ctx);
+            return
+        };
+        
+        // Get reward rate for validators (use staking pool rate)
+        let reward_rate = if (table::contains(&treasury.reward_rates, POOL_STAKING)) {
+            *table::borrow(&treasury.reward_rates, POOL_STAKING)
+        } else {
+            800 // Default 8% annual for validators
+        };
+        
+        // Create staking position for validator
+        let staking_position = StakingPosition {
+            staker: validator_address,
+            amount: stake_amount,
+            start_epoch: tx_context::epoch(ctx),
+            lock_period: MIN_STAKING_PERIOD, // Minimum lock period for validators
+            reward_rate,
+            accumulated_rewards: 0,
+            last_claim_epoch: tx_context::epoch(ctx),
+            auto_compound: false, // Validators start with manual reward claims
+        };
+        
+        // Add to staking pools
+        table::add(&mut treasury.staking_pools, validator_address, staking_position);
+        
+        // Update total staked amount
+        treasury.total_staked = treasury.total_staked + stake_amount;
+        
+        // Ensure staking pool exists and add the stake amount to it
+        if (!table::contains(&treasury.pools, POOL_STAKING)) {
+            // Create staking pool if it doesn't exist
+            let staking_pool = TreasuryPool {
+                pool_type: POOL_STAKING,
+                balance: balance::zero(),
+                allocated_amount: 0,
+                reserved_amount: 0,
+                yield_accumulated: 0,
+                last_yield_calculation: 0,
+                withdrawal_history: vector::empty(),
+                pool_strategy: STRATEGY_CONSERVATIVE,
+                performance_metrics: PoolMetrics {
+                    total_deposits: 0,
+                    total_withdrawals: 0,
+                    total_yield: 0,
+                    average_balance: 0,
+                    utilization_rate: 0,
+                    performance_score: 5000,
+                },
+                last_updated: 0,
+            };
+            table::add(&mut treasury.pools, POOL_STAKING, staking_pool);
+        };
+        
+        // Update staking pool allocation tracking
+        let staking_pool = table::borrow_mut(&mut treasury.pools, POOL_STAKING);
+        staking_pool.allocated_amount = staking_pool.allocated_amount + stake_amount;
+        staking_pool.performance_metrics.total_deposits = staking_pool.performance_metrics.total_deposits + stake_amount;
+    }
+    
+    /// Update staking position when validator adds more stake
+    public fun update_staking_position_stake(
+        treasury: &mut Treasury,
+        validator_address: address,
+        additional_stake: u64,
+        ctx: &mut TxContext,
+    ) {
+        assert!(table::contains(&treasury.staking_pools, validator_address), E_INVALID_STAKING_PARAMS);
+        
+        let staking_position = table::borrow_mut(&mut treasury.staking_pools, validator_address);
+        
+        // Calculate and accumulate any pending rewards before updating stake amount
+        let current_epoch = tx_context::epoch(ctx);
+        let pending_rewards = calculate_staking_rewards(staking_position, current_epoch);
+        staking_position.accumulated_rewards = pending_rewards;
+        staking_position.last_claim_epoch = current_epoch;
+        
+        // Update stake amount
+        staking_position.amount = staking_position.amount + additional_stake;
+        
+        // Update treasury totals
+        treasury.total_staked = treasury.total_staked + additional_stake;
+        
+        // Update staking pool allocation
+        let staking_pool = table::borrow_mut(&mut treasury.pools, POOL_STAKING);
+        staking_pool.allocated_amount = staking_pool.allocated_amount + additional_stake;
+        staking_pool.performance_metrics.total_deposits = staking_pool.performance_metrics.total_deposits + additional_stake;
+    }
+    
+    /// Remove staking position when validator withdraws stake
+    public fun reduce_staking_position_stake(
+        treasury: &mut Treasury,
+        validator_address: address,
+        stake_reduction: u64,
+        ctx: &mut TxContext,
+    ) {
+        assert!(table::contains(&treasury.staking_pools, validator_address), E_INVALID_STAKING_PARAMS);
+        
+        let staking_position = table::borrow_mut(&mut treasury.staking_pools, validator_address);
+        assert!(staking_position.amount >= stake_reduction, E_INSUFFICIENT_BALANCE);
+        
+        // Calculate and preserve any pending rewards
+        let current_epoch = tx_context::epoch(ctx);
+        let pending_rewards = calculate_staking_rewards(staking_position, current_epoch);
+        staking_position.accumulated_rewards = pending_rewards;
+        staking_position.last_claim_epoch = current_epoch;
+        
+        // Reduce stake amount
+        staking_position.amount = staking_position.amount - stake_reduction;
+        
+        // If stake goes to zero, remove the position entirely
+        if (staking_position.amount == 0) {
+            let _removed_position = table::remove(&mut treasury.staking_pools, validator_address);
+        };
+        
+        // Update treasury totals
+        treasury.total_staked = treasury.total_staked - stake_reduction;
+        
+        // Update staking pool allocation
+        let staking_pool = table::borrow_mut(&mut treasury.pools, POOL_STAKING);
+        staking_pool.allocated_amount = staking_pool.allocated_amount - stake_reduction;
+        staking_pool.performance_metrics.total_withdrawals = staking_pool.performance_metrics.total_withdrawals + stake_reduction;
+    }
+    
     /// Calculate and distribute staking rewards
     public fun calculate_and_distribute_staking_rewards(
         treasury: &mut Treasury,
         epoch: u64,
         clock: &Clock,
-        ctx: &mut TxContext,
+        _ctx: &mut TxContext,
     ) {
         // Get all stakers (simplified - in production would iterate through staking_pools table)
         // This would be called periodically by the platform
@@ -1660,7 +1795,6 @@ module suiverse_core::treasury {
     /// Update daily withdrawal tracking
     fun update_daily_withdrawal_tracking(
         treasury: &mut Treasury,
-        pool_type: u8,
         amount: u64,
         clock: &Clock,
     ) {
@@ -1731,17 +1865,17 @@ module suiverse_core::treasury {
 
     /// Execute pool rebalancing (simplified implementation)
     fun execute_pool_rebalancing(
-        treasury: &mut Treasury,
-        from_pools: &vector<u8>,
-        to_pools: &vector<u8>,
-        amounts: &vector<u64>,
+        _treasury: &mut Treasury,
+        _from_pools: &vector<u8>,
+        _to_pools: &vector<u8>,
+        _amounts: &vector<u64>,
     ) {
         // Simplified rebalancing - in production would need sophisticated balancing algorithm
         // This is a placeholder for the complex rebalancing logic
     }
 
     /// Mark emergency audit entries as resolved
-    fun mark_emergency_audits_resolved(audit_logs: &mut vector<AuditEntry>, current_time: u64) {
+    fun mark_emergency_audits_resolved(audit_logs: &mut vector<AuditEntry>, _current_time: u64) {
         let mut i = 0;
         while (i < vector::length(audit_logs)) {
             let audit_entry = vector::borrow_mut(audit_logs, i);

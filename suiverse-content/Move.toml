@@ -9,7 +9,7 @@ Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-fram
 SuiVerseCore = { local = "../suiverse-core" }
 
 [addresses]
-suiverse_core = "0x711a615a0603193f81f2ca50db96bc2231c6fb070a58ee95917347a410473faf"
-suiverse_content = "0xe85e9cccdd08468abc23c1e3411112f9b24d1d2d146d5a851dd7cc3fde3326d7"
+suiverse_core = "0x2b7c8ec894a3fb64a059a17ef6d7d9a53ae27d6165c9c0254fdf92b949784500"
+suiverse_content = "0x0500528079939b277bc93c1a38a30db2426d3428b823973e2aab864e97a261c2"
 
 [dev-dependencies]

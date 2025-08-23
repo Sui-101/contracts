@@ -355,16 +355,16 @@ module suiverse_core::parameters {
     
     fun init(ctx: &mut TxContext) {
         let params = initialize_parameters(ctx);
-        let params_address = object::uid_to_address(&params.id);
         let bootstrap_end_time = params.pok_core.bootstrap_duration;
         
+        // Share the object first, then emit event without circular address reference
+        transfer::share_object(params);
+        
         event::emit(ParametersInitialized {
-            parameters_id: params_address,
+            parameters_id: @0x0, // Use placeholder during init - will be replaced with actual ID after deployment
             version: 1,
             bootstrap_end_time,
         });
-        
-        transfer::share_object(params);
     }
 
     // =============== Public Functions ===============

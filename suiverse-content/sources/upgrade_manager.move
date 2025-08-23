@@ -1,3 +1,4 @@
+#[allow(duplicate_alias)]
 module suiverse_content::upgrade_manager {
     use sui::package::{Self, UpgradeCap, UpgradeTicket, UpgradeReceipt};
     use sui::object::{Self, UID};
@@ -10,6 +11,7 @@ module suiverse_content::upgrade_manager {
 
     // =============== Error Constants ===============
     const E_NOT_AUTHORIZED: u64 = 9001;
+    #[allow(unused_const)]
     const E_INVALID_VERSION: u64 = 9002;
     const E_UPGRADE_NOT_READY: u64 = 9003;
 

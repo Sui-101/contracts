@@ -13,8 +13,8 @@ module suiverse_economics::content_view {
     use sui::transfer;
     use suiverse_core::parameters::{Self, SystemParameters};
     use suiverse_core::treasury::{Self, Treasury};
-    use suiverse_content::articles::{Self, OriginalArticle};
-    use suiverse_content::projects::{Self, Project};
+    use suiverse_content::articles::{Self as articles, OriginalArticle};
+    // use suiverse_content::projects::{Self, Project}; // Commented out - causing compilation issues
     use std::string::utf8;
 
     // =============== Constants ===============

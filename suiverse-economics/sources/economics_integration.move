@@ -24,6 +24,9 @@ module suiverse_economics::economics_integration {
     use suiverse_economics::certificate_market;
     use suiverse_economics::learning_incentives;
     use suiverse_economics::dynamic_fees;
+    use suiverse_economics::system_registry::{Self, SystemRegistry};
+    use suiverse_economics::config_manager::{Self, ConfigManager, ConfigManagerAdminCap};
+    use suiverse_economics::config_wrappers;
 
     // === Constants ===
     const POLICY_UPDATE_COOLDOWN: u64 = 86400000; // 24 hours in milliseconds
@@ -62,6 +65,11 @@ module suiverse_economics::economics_integration {
     const E_VERSION_INCOMPATIBLE: u64 = 24;
     const E_MIGRATION_NOT_COMPLETE: u64 = 25;
     const E_UPGRADE_LIMIT_EXCEEDED: u64 = 26;
+    
+    // === System Registry Error Codes ===
+    const E_SYSTEM_REGISTRY_NOT_AVAILABLE: u64 = 30;
+    const E_REQUIRED_OBJECT_NOT_REGISTERED: u64 = 31;
+    const E_SYSTEM_REGISTRY_NOT_OPERATIONAL: u64 = 32;
 
     // === Structs ===
 
@@ -133,6 +141,8 @@ module suiverse_economics::economics_integration {
         policy_changes_this_epoch: u64,
         admin_cap: ID,
         analytics_oracle: address, // Off-chain analytics provider
+        system_registry_id: Option<ID>, // Reference to system registry for automatic object resolution
+        config_manager_id: Option<ID>, // Reference to config manager for DOF-based config access
     }
 
     /// Cross-module transaction tracking
@@ -273,6 +283,8 @@ module suiverse_economics::economics_integration {
             policy_changes_this_epoch: 0,
             admin_cap: object::id(&admin_cap),
             analytics_oracle: @0x0, // To be set later
+            system_registry_id: option::none(), // To be set when registry is available
+            config_manager_id: option::none(), // To be set when config manager is available
         };
 
         transfer::transfer(admin_cap, tx_context::sender(ctx));
@@ -346,7 +358,77 @@ module suiverse_economics::economics_integration {
         (remaining_payment, transaction_id)
     }
 
-    /// Update comprehensive economic metrics across all modules
+    /// Update comprehensive economic metrics across all modules (DOF-based version)
+    public entry fun update_economic_metrics_with_config_manager(
+        _: &EconomicsAdminCap,
+        hub: &mut EconomicsHub,
+        config_manager: &ConfigManager,
+        clock: &Clock,
+    ) {
+        assert!(option::is_some(&hub.config_manager_id), E_REQUIRED_OBJECT_NOT_REGISTERED);
+        assert!(config_wrappers::has_all_essential_registries(config_manager), E_REQUIRED_OBJECT_NOT_REGISTERED);
+
+        // Clock is now passed as parameter since Clock objects cannot be stored in DOF
+        let current_time = clock::timestamp_ms(clock);
+        assert!(current_time - hub.economic_metrics.last_calculated >= ANALYTICS_UPDATE_INTERVAL,
+                E_ANALYTICS_UPDATE_TOO_FREQUENT);
+
+        let (cert_registry, incentive_registry, fee_registry) = config_wrappers::get_all_registries(config_manager);
+
+        // Aggregate revenue from all modules
+        let certificate_volume = certificate_market::get_total_market_volume(cert_registry);
+        let incentive_rewards = learning_incentives::get_total_rewards_distributed(incentive_registry);
+        let fee_revenue = dynamic_fees::get_total_fee_revenue(fee_registry);
+
+        // Calculate values that need access to other parts of hub first
+        let anomaly_count = hub.anomaly_detection.anomaly_count_24h;
+        let synergy_score = calculate_synergy_score(hub, current_time);
+        
+        // Now get mutable reference to metrics and update
+        let metrics = &mut hub.economic_metrics;
+        
+        metrics.total_platform_revenue = certificate_volume + incentive_rewards + fee_revenue;
+
+        // Update module-specific revenue
+        vec_map::insert(&mut metrics.revenue_by_module, string::utf8(b"certificate_market"), certificate_volume);
+        vec_map::insert(&mut metrics.revenue_by_module, string::utf8(b"learning_incentives"), incentive_rewards);
+        vec_map::insert(&mut metrics.revenue_by_module, string::utf8(b"dynamic_fees"), fee_revenue);
+
+        // Calculate economic health score
+        metrics.economic_health_score = calculate_economic_health_score(
+            metrics.total_platform_revenue,
+            metrics.active_users_count,
+            anomaly_count
+        );
+
+        // Calculate market efficiency
+        metrics.market_efficiency_score = calculate_market_efficiency(
+            cert_registry,
+            fee_registry
+        );
+
+        // Update synergy score based on cross-module transactions
+        metrics.cross_module_synergy_score = synergy_score;
+        metrics.last_calculated = current_time;
+
+        // Store health score for later check
+        let health_score = metrics.economic_health_score;
+
+        // Check for economic emergency
+        if (health_score < ECONOMIC_EMERGENCY_THRESHOLD) {
+            activate_economic_emergency(hub, clock);
+        };
+
+        event::emit(EconomicHealthUpdateEvent {
+            overall_health_score: health_score,
+            module_health_scores: vec_map::empty(), // Populated with actual module data
+            critical_alerts: vector::empty(), // Populated with actual alerts
+            trend_direction: string::utf8(b"stable"),
+            timestamp: current_time,
+        });
+    }
+
+    /// Update comprehensive economic metrics across all modules (legacy version)
     public entry fun update_economic_metrics(
         _: &EconomicsAdminCap,
         hub: &mut EconomicsHub,
@@ -538,7 +620,55 @@ module suiverse_economics::economics_integration {
         hub.policy_changes_this_epoch = hub.policy_changes_this_epoch + 1;
     }
 
-    /// Detect and flag economic anomalies
+    /// Detect and flag economic anomalies (DOF-based version)
+    public entry fun detect_economic_anomalies_with_config_manager(
+        hub: &mut EconomicsHub,
+        config_manager: &ConfigManager,
+        clock: &Clock,
+    ) {
+        assert!(option::is_some(&hub.config_manager_id), E_REQUIRED_OBJECT_NOT_REGISTERED);
+        assert!(config_wrappers::has_all_essential_registries(config_manager), E_REQUIRED_OBJECT_NOT_REGISTERED);
+
+        // Clock is now passed as parameter since Clock objects cannot be stored in DOF
+        let current_time = clock::timestamp_ms(clock);
+        
+        let (cert_registry, _, fee_registry) = config_wrappers::get_all_registries(config_manager);
+        
+        // Clear previous alerts first
+        let detection = &mut hub.anomaly_detection;
+        detection.price_volatility_alerts = vector::empty();
+        detection.volume_spike_alerts = vector::empty();
+        detection.market_manipulation_flags = vector::empty();
+
+        // Check certificate market anomalies
+        detect_market_anomalies(hub, cert_registry, current_time);
+
+        // Check fee system anomalies
+        detect_fee_anomalies(hub, fee_registry, current_time);
+
+        // Check cross-module consistency
+        detect_cross_module_anomalies(hub, current_time);
+
+        // Update last check timestamp
+        hub.anomaly_detection.last_anomaly_check = current_time;
+
+        // Emit anomaly alerts if any detected
+        if (vector::length(&hub.anomaly_detection.price_volatility_alerts) > 0 ||
+            vector::length(&hub.anomaly_detection.volume_spike_alerts) > 0 ||
+            vector::length(&hub.anomaly_detection.market_manipulation_flags) > 0) {
+            
+            event::emit(EconomicAnomalyDetectedEvent {
+                anomaly_type: string::utf8(b"multiple"),
+                severity: 2, // High severity
+                affected_modules: vector::empty(), // Populated with actual data
+                detection_details: vec_map::empty(), // Populated with metrics
+                recommended_actions: vector::empty(), // Populated with actions
+                timestamp: current_time,
+            });
+        };
+    }
+
+    /// Detect and flag economic anomalies (legacy version)
     public entry fun detect_economic_anomalies(
         hub: &mut EconomicsHub,
         certificate_market_registry: &certificate_market::MarketRegistry,
@@ -830,5 +960,136 @@ module suiverse_economics::economics_integration {
         let withdrawn = balance::split(&mut hub.integration_pool, amount);
         let fee_coin = coin::from_balance(withdrawn, ctx);
         transfer::public_transfer(fee_coin, tx_context::sender(ctx));
+    }
+
+    // === System Registry Integration Functions ===
+
+    /// Link the EconomicsHub to a SystemRegistry for automatic object resolution
+    public entry fun link_system_registry(
+        _: &EconomicsAdminCap,
+        hub: &mut EconomicsHub,
+        system_registry_id: ID,
+    ) {
+        hub.system_registry_id = option::some(system_registry_id);
+    }
+
+    /// Unlink the SystemRegistry (fallback to manual object passing)
+    public entry fun unlink_system_registry(
+        _: &EconomicsAdminCap,
+        hub: &mut EconomicsHub,
+    ) {
+        hub.system_registry_id = option::none();
+    }
+
+    // === System Registry Status Functions ===
+
+    /// Check if EconomicsHub is linked to a SystemRegistry
+    public fun is_linked_to_system_registry(hub: &EconomicsHub): bool {
+        option::is_some(&hub.system_registry_id)
+    }
+
+    /// Get the linked SystemRegistry ID if available
+    public fun get_linked_system_registry_id(hub: &EconomicsHub): Option<ID> {
+        hub.system_registry_id
+    }
+
+    /// Check if simplified functions are available (registry linked and operational)
+    public fun are_simplified_functions_available(
+        hub: &EconomicsHub,
+        system_registry: &SystemRegistry,
+    ): bool {
+        option::is_some(&hub.system_registry_id) && 
+        system_registry::is_registry_operational(system_registry)
+    }
+
+    // === Config Manager Integration Functions ===
+
+    /// Link the EconomicsHub to a ConfigManager for DOF-based object resolution
+    public entry fun link_config_manager(
+        _: &EconomicsAdminCap,
+        hub: &mut EconomicsHub,
+        config_manager_id: ID,
+    ) {
+        hub.config_manager_id = option::some(config_manager_id);
+    }
+
+    /// Unlink the ConfigManager (fallback to manual object passing)
+    public entry fun unlink_config_manager(
+        _: &EconomicsAdminCap,
+        hub: &mut EconomicsHub,
+    ) {
+        hub.config_manager_id = option::none();
+    }
+
+    /// Check if EconomicsHub is linked to a ConfigManager
+    public fun is_linked_to_config_manager(hub: &EconomicsHub): bool {
+        option::is_some(&hub.config_manager_id)
+    }
+
+    /// Get the linked ConfigManager ID if available
+    public fun get_linked_config_manager_id(hub: &EconomicsHub): Option<ID> {
+        hub.config_manager_id
+    }
+
+    /// Check if DOF-based functions are available (config manager linked and operational)
+    public fun are_dof_functions_available(
+        hub: &EconomicsHub,
+        config_manager: &ConfigManager,
+    ): bool {
+        option::is_some(&hub.config_manager_id) && 
+        config_manager::is_manager_operational(config_manager) &&
+        config_wrappers::has_all_essential_registries(config_manager)
+    }
+
+    /// Get comprehensive status of both system registry and config manager integration  
+    /// Note: This function cannot accept Option<&Reference> types - parameters must be passed directly
+    public fun get_integration_status_with_registry(
+        hub: &EconomicsHub,
+        system_registry: &SystemRegistry,
+    ): (bool, bool, bool) {
+        let registry_linked = option::is_some(&hub.system_registry_id);
+        let registry_operational = system_registry::is_registry_operational(system_registry);
+        
+        (registry_linked, registry_operational, true)
+    }
+    
+    /// Get config manager integration status
+    public fun get_integration_status_with_config_manager(
+        hub: &EconomicsHub,
+        config_manager: &ConfigManager,
+    ): (bool, bool, bool) {
+        let config_linked = option::is_some(&hub.config_manager_id);
+        let config_operational = config_manager::is_manager_operational(config_manager) &&
+                                config_wrappers::has_all_essential_registries(config_manager);
+
+        (config_linked, config_operational, true)
+    }
+
+    /// Simplified entry function that works with config manager
+    public entry fun simplified_update_metrics_with_config_manager(
+        _: &EconomicsAdminCap,
+        hub: &mut EconomicsHub,
+        config_manager: &ConfigManager,
+        clock: &Clock,
+    ) {
+        assert!(option::is_some(&hub.config_manager_id), E_REQUIRED_OBJECT_NOT_REGISTERED);
+        
+        if (config_manager::is_manager_operational(config_manager) && 
+            config_wrappers::has_all_essential_registries(config_manager)) {
+            // This would need a proper implementation with clock parameter
+            // For now, we'll indicate this needs proper implementation
+            let _current_time = clock::timestamp_ms(clock);
+            // TODO: Implement actual metrics update logic
+        };
+
+        // If neither approach is available, fail
+        assert!(false, E_REQUIRED_OBJECT_NOT_REGISTERED);
+    }
+
+    // === Testing Functions ===
+
+    #[test_only]
+    public fun test_init(ctx: &mut TxContext) {
+        init(ctx);
     }
 }

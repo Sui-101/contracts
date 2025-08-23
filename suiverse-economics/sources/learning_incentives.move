@@ -15,6 +15,7 @@ module suiverse_economics::learning_incentives {
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
     use sui::vec_map::{Self as vec_map, VecMap};
+    use suiverse_economics::config_manager::{Self, ConfigManager};
 
     // === Constants ===
     const BASE_LEARNING_REWARD: u64 = 10_000_000; // 0.01 SUI base learning reward
@@ -42,6 +43,8 @@ module suiverse_economics::learning_incentives {
     const E_COOLDOWN_ACTIVE: u64 = 8;
     const E_INVALID_PEER_REVIEW: u64 = 9;
     const E_INSUFFICIENT_FUNDS: u64 = 10;
+    const E_CONFIG_MANAGER_NOT_AVAILABLE: u64 = 11;
+    const E_CLOCK_NOT_CONFIGURED: u64 = 12;
 
     // === Structs ===
 
@@ -112,7 +115,7 @@ module suiverse_economics::learning_incentives {
     }
 
     /// Global incentive system registry
-    public struct IncentiveRegistry has key {
+    public struct IncentiveRegistry has key, store {
         id: UID,
         user_progress: Table<address, LearningProgress>,
         active_mentoring: Table<ID, MentoringSession>,
@@ -682,5 +685,103 @@ module suiverse_economics::learning_incentives {
         let withdrawn = balance::split(&mut registry.incentive_pool, amount);
         let withdrawal_coin = coin::from_balance(withdrawn, ctx);
         transfer::public_transfer(withdrawal_coin, tx_context::sender(ctx));
+    }
+
+    // === Simplified Entry Functions (Using ConfigManager DOF) ===
+
+    /// Simplified learning activity recording using config manager
+    public entry fun record_learning_activity_with_config(
+        registry: &mut IncentiveRegistry,
+        config_manager: &ConfigManager,
+        subject_area: String,
+        learning_hours: u64,
+        concepts_learned: u64,
+        retention_test_score: u64,
+        is_cross_domain: bool,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        // Verify config manager is operational
+        assert!(config_manager::is_manager_operational(config_manager), E_CONFIG_MANAGER_NOT_AVAILABLE);
+        
+        // Call the original function with the provided clock
+        record_learning_activity(registry, subject_area, learning_hours, concepts_learned, retention_test_score, is_cross_domain, clock, ctx);
+    }
+
+    /// Simplified mentoring session completion using config manager
+    public entry fun complete_mentoring_session_with_config(
+        registry: &mut IncentiveRegistry,
+        config_manager: &ConfigManager,
+        session_id: ID,
+        mentor_rating: u64,
+        mentee_progress_score: u64,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        // Verify config manager is operational
+        assert!(config_manager::is_manager_operational(config_manager), E_CONFIG_MANAGER_NOT_AVAILABLE);
+        
+        // Call the original function with the provided clock
+        complete_mentoring_session(registry, session_id, mentor_rating, mentee_progress_score, clock, ctx);
+    }
+
+    /// Simplified peer review submission using config manager
+    public entry fun submit_peer_review_with_config(
+        registry: &mut IncentiveRegistry,
+        config_manager: &ConfigManager,
+        content_id: ID,
+        quality_score: u64,
+        detailed_feedback: bool,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        // Verify config manager is operational
+        assert!(config_manager::is_manager_operational(config_manager), E_CONFIG_MANAGER_NOT_AVAILABLE);
+        
+        // Call the original function with the provided clock
+        submit_peer_review(registry, content_id, quality_score, detailed_feedback, clock, ctx);
+    }
+
+    /// Simplified skill mastery claim using config manager
+    public entry fun claim_skill_mastery_with_config(
+        registry: &mut IncentiveRegistry,
+        config_manager: &ConfigManager,
+        skill_name: String,
+        mastery_level: u64,
+        validation_method: String,
+        validator_addresses: vector<address>,
+        certification_id: Option<ID>,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        // Verify config manager is operational
+        assert!(config_manager::is_manager_operational(config_manager), E_CONFIG_MANAGER_NOT_AVAILABLE);
+        
+        // Call the original function with the provided clock
+        claim_skill_mastery(registry, skill_name, mastery_level, validation_method, validator_addresses, certification_id, clock, ctx);
+    }
+
+    /// Simplified cohort creation using config manager
+    public entry fun create_learning_cohort_with_config(
+        registry: &mut IncentiveRegistry,
+        config_manager: &ConfigManager,
+        name: String,
+        subject_areas: vector<String>,
+        initial_funding: Coin<SUI>,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        // Verify config manager is operational
+        assert!(config_manager::is_manager_operational(config_manager), E_CONFIG_MANAGER_NOT_AVAILABLE);
+        
+        // Call the original function with the provided clock
+        create_learning_cohort(registry, name, subject_areas, initial_funding, clock, ctx);
+    }
+
+    // === Testing Functions ===
+
+    #[test_only]
+    public fun test_init(ctx: &mut TxContext) {
+        init(ctx);
     }
 }

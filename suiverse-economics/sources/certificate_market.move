@@ -17,6 +17,7 @@ module suiverse_economics::certificate_market {
     use sui::table::{Self, Table};
     use sui::transfer;
     use sui::tx_context::{TxContext};
+    use suiverse_economics::config_manager::{Self, ConfigManager};
 
     // === Constants ===
     const BASE_CERTIFICATE_VALUE: u64 = 100_000_000; // 0.1 SUI base value
@@ -39,6 +40,8 @@ module suiverse_economics::certificate_market {
     const E_CERTIFICATE_NOT_FOUND: u64 = 6;
     const E_MARKET_MANIPULATION: u64 = 7;
     const E_COOLDOWN_ACTIVE: u64 = 8;
+    const E_CONFIG_MANAGER_NOT_AVAILABLE: u64 = 9;
+    const E_CLOCK_NOT_CONFIGURED: u64 = 10;
 
     // === Structs ===
 
@@ -58,7 +61,7 @@ module suiverse_economics::certificate_market {
     }
 
     /// Global market registry
-    public struct MarketRegistry has key {
+    public struct MarketRegistry has key, store {
         id: UID,
         markets: Table<String, CertificateMarket>,
         market_names: vector<String>, // Track market names for iteration
@@ -531,5 +534,88 @@ module suiverse_economics::certificate_market {
         let withdrawn = balance::split(&mut registry.market_fee_pool, amount);
         let fee_coin = coin::from_balance(withdrawn, ctx);
         transfer::public_transfer(fee_coin, tx_context::sender(ctx));
+    }
+
+    // === Simplified Entry Functions (Using ConfigManager DOF) ===
+
+    /// Simplified certificate market creation using config manager
+    public entry fun create_certificate_market_with_config(
+        admin_cap: &MarketAdminCap,
+        registry: &mut MarketRegistry,
+        analytics: &mut MarketAnalytics,
+        config_manager: &ConfigManager,
+        certificate_type: String,
+        base_price: u64,
+        rarity_tier: u8,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        // Verify config manager is operational
+        assert!(config_manager::is_manager_operational(config_manager), E_CONFIG_MANAGER_NOT_AVAILABLE);
+        
+        // Call the original function with the provided clock
+        create_certificate_market(admin_cap, registry, analytics, certificate_type, base_price, rarity_tier, clock, ctx);
+    }
+
+    /// Simplified certificate listing using config manager
+    public entry fun list_certificate_for_sale_with_config(
+        registry: &mut MarketRegistry,
+        config_manager: &ConfigManager,
+        kiosk: &mut Kiosk,
+        cap: &KioskOwnerCap,
+        certificate_id: ID,
+        certificate_type: String,
+        asking_price: u64,
+        duration_hours: u64,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        // Verify config manager is operational
+        assert!(config_manager::is_manager_operational(config_manager), E_CONFIG_MANAGER_NOT_AVAILABLE);
+        
+        // Call the original function with the provided clock
+        list_certificate_for_sale(registry, kiosk, cap, certificate_id, certificate_type, asking_price, duration_hours, clock, ctx);
+    }
+
+    /// Simplified trade execution using config manager
+    public entry fun execute_trade_with_config(
+        registry: &mut MarketRegistry,
+        analytics: &mut MarketAnalytics,
+        config_manager: &ConfigManager,
+        buyer_kiosk: &mut Kiosk,
+        buyer_cap: &KioskOwnerCap,
+        seller_kiosk: &mut Kiosk,
+        order_id: ID,
+        payment: Coin<SUI>,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        // Verify config manager is operational
+        assert!(config_manager::is_manager_operational(config_manager), E_CONFIG_MANAGER_NOT_AVAILABLE);
+        
+        // Call the original function with the provided clock
+        execute_trade(registry, analytics, buyer_kiosk, buyer_cap, seller_kiosk, order_id, payment, clock, ctx);
+    }
+
+    /// Simplified market analytics update using config manager
+    public entry fun update_market_analytics_with_config(
+        admin_cap: &MarketAdminCap,
+        registry: &mut MarketRegistry,
+        analytics: &mut MarketAnalytics,
+        config_manager: &ConfigManager,
+        clock: &Clock,
+    ) {
+        // Verify config manager is operational
+        assert!(config_manager::is_manager_operational(config_manager), E_CONFIG_MANAGER_NOT_AVAILABLE);
+        
+        // Call the original function with the provided clock
+        update_market_analytics(admin_cap, registry, analytics, clock);
+    }
+
+    // === Testing Functions ===
+
+    #[test_only]
+    public fun test_init(ctx: &mut TxContext) {
+        init(ctx);
     }
 }

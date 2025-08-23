@@ -17,11 +17,11 @@ module suiverse_content::utils {
         sum
     }
 
-    /// Find an element in a vector and return (found, index)
-    public fun vector_find<T>(v: &vector<T>, element: &T): (bool, u64) {
+    /// Find an element in a vector and return (found, index) - specialized for u64
+    public fun vector_find_u64(v: &vector<u64>, element: u64): (bool, u64) {
         let mut i = 0;
         while (i < vector::length(v)) {
-            if (vector::borrow(v, i) == element) {
+            if (*vector::borrow(v, i) == element) {
                 return (true, i)
             };
             i = i + 1;
