@@ -46,7 +46,7 @@ target/
 Cargo.lock
 
 # Environment files
-.env
+
 .env.local
 .env.*.local
 
