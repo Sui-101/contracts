@@ -121,6 +121,9 @@ module core::governance {
         active_validators: Table<address, PoKValidator>,
         total_weight: u64,
         total_stake: u64,
+        total_knowledge: u64,
+        knowledge_exchange_rate: u64,
+        current_epoch: u64,
         admin: address,
     }
     
@@ -297,6 +300,9 @@ module core::governance {
             active_validators: table::new(ctx),
             total_weight: 0,
             total_stake: 0,
+            total_knowledge: 0,
+            knowledge_exchange_rate: 1,
+            current_epoch: 0,
             admin,
         };
         
@@ -396,7 +402,9 @@ module core::governance {
     ) {
         let validator_address = tx_context::sender(ctx);
         let current_time = clock::timestamp_ms(clock);
-        
+
+        refresh_knowledge_rate(pool, clock);
+
         // Validate conditions
         assert!(current_time < config.bootstrap_end_time, E_GENESIS_PHASE_ENDED);
         assert!(vector::length(&config.genesis_validators) < GENESIS_VALIDATOR_COUNT, E_GENESIS_PHASE_ACTIVE);
@@ -417,7 +425,7 @@ module core::governance {
             validation_count: 0,
             consensus_accuracy: 100,
             state: VALIDATOR_STATE_ACTIVE,
-            weight: calculate_weight(100, stake_amount, 100),
+            weight: calculate_weight(100, stake_amount, 100, pool.knowledge_exchange_rate),
             last_validation: current_time,
             is_genesis: true,
             registration_time: current_time,
@@ -435,6 +443,7 @@ module core::governance {
         vector::push_back(&mut config.genesis_validators, validator_address);
         pool.total_weight = pool.total_weight + validator.weight;
         pool.total_stake = pool.total_stake + stake_amount;
+        pool.total_knowledge = pool.total_knowledge + 100;
         table::add(&mut pool.active_validators, validator_address, validator);
         
         event::emit(ValidatorRegistered {
@@ -462,7 +471,9 @@ module core::governance {
     ) {
         let validator_address = tx_context::sender(ctx);
         let current_time = clock::timestamp_ms(clock);
-        
+
+        refresh_knowledge_rate(pool, clock);
+
         // Validate conditions
         assert!(current_time >= config.bootstrap_end_time, E_GENESIS_PHASE_ACTIVE);
         assert!(vector::length(&certificate_ids) >= MIN_CERTIFICATES_FOR_NON_GENESIS, E_INSUFFICIENT_KNOWLEDGE_SCORE);
@@ -499,7 +510,7 @@ module core::governance {
             validation_count: 0,
             consensus_accuracy: 100,
             state: VALIDATOR_STATE_ACTIVE,
-            weight: calculate_weight(knowledge_score, stake_amount, 100),
+            weight: calculate_weight(knowledge_score, stake_amount, 100, pool.knowledge_exchange_rate),
             last_validation: current_time,
             is_genesis: false,
             registration_time: current_time,
@@ -516,6 +527,7 @@ module core::governance {
         // Update state
         pool.total_weight = pool.total_weight + validator.weight;
         pool.total_stake = pool.total_stake + stake_amount;
+        pool.total_knowledge = pool.total_knowledge + knowledge_score;
         table::add(&mut pool.active_validators, validator_address, validator);
         
         event::emit(ValidatorRegistered {
@@ -533,11 +545,14 @@ module core::governance {
         treasury: &mut Treasury,
         additional_amount: u64,
         payment: &mut Coin<SUI>,
+        clock: &Clock,
         ctx: &mut TxContext,
     ) {
         let validator_address = tx_context::sender(ctx);
         assert!(table::contains(&pool.active_validators, validator_address), E_NOT_VALIDATOR);
         assert!(coin::value(payment) >= additional_amount, E_INSUFFICIENT_COIN_VALUE);
+
+        refresh_knowledge_rate(pool, clock);
         
         // Extract additional stake
         let additional_stake = coin::split(payment, additional_amount, ctx);
@@ -551,7 +566,7 @@ module core::governance {
         
         let new_stake_amount = balance::value(&validator.stake_amount);
         validator.stake_tier = calculate_stake_tier(new_stake_amount);
-        validator.weight = calculate_weight(validator.knowledge_score, new_stake_amount, validator.consensus_accuracy);
+        validator.weight = calculate_weight(validator.knowledge_score, new_stake_amount, validator.consensus_accuracy, pool.knowledge_exchange_rate);
         
         // Update treasury staking position
         core::treasury::update_staking_position_stake(
@@ -579,10 +594,13 @@ module core::governance {
         pool: &mut ValidatorPool,
         treasury: &mut Treasury,
         amount: u64,
+        clock: &Clock,
         ctx: &mut TxContext,
     ) {
         let validator_address = tx_context::sender(ctx);
         assert!(table::contains(&pool.active_validators, validator_address), E_NOT_VALIDATOR);
+
+        refresh_knowledge_rate(pool, clock);
         
         let validator = table::borrow_mut(&mut pool.active_validators, validator_address);
         assert!(balance::value(&validator.stake_amount) >= amount, E_INSUFFICIENT_STAKE);
@@ -594,7 +612,7 @@ module core::governance {
         
         let new_stake_amount = balance::value(&validator.stake_amount);
         validator.stake_tier = calculate_stake_tier(new_stake_amount);
-        validator.weight = calculate_weight(validator.knowledge_score, new_stake_amount, validator.consensus_accuracy);
+        validator.weight = calculate_weight(validator.knowledge_score, new_stake_amount, validator.consensus_accuracy, pool.knowledge_exchange_rate);
         
         // Update treasury staking position
         core::treasury::reduce_staking_position_stake(
@@ -663,8 +681,9 @@ module core::governance {
     ) {
         let validator_address = tx_context::sender(ctx);
         assert!(table::contains(&pool.active_validators, validator_address), E_NOT_VALIDATOR);
-        
+
         let current_time = clock::timestamp_ms(clock);
+        refresh_knowledge_rate(pool, clock);
         let validator = table::borrow_mut(&mut pool.active_validators, validator_address);
         
         // Calculate certificate value
@@ -691,11 +710,13 @@ module core::governance {
         validator.weight = calculate_weight(
             validator.knowledge_score,
             balance::value(&validator.stake_amount),
-            validator.consensus_accuracy
+            validator.consensus_accuracy,
+            pool.knowledge_exchange_rate
         );
-        
+
         // Update pool weight
         pool.total_weight = pool.total_weight - old_weight + validator.weight;
+        pool.total_knowledge = pool.total_knowledge + current_value;
         
         event::emit(CertificateAdded {
             validator: validator_address,
@@ -908,19 +929,27 @@ module core::governance {
         else if (stake_amount >= STAKE_TIER_BASIC) { 2 }
         else { 1 }
     }
+
+    fun refresh_knowledge_rate(pool: &mut ValidatorPool, clock: &Clock) {
+        let epoch = clock::epoch(clock);
+        if (epoch > pool.current_epoch) {
+            pool.current_epoch = epoch;
+            if (pool.total_knowledge > 0) {
+                pool.knowledge_exchange_rate = pool.total_stake / pool.total_knowledge;
+            } else {
+                pool.knowledge_exchange_rate = 1;
+            };
+        };
+    }
     
-    fun calculate_weight(knowledge_score: u64, stake_amount: u64, consensus_accuracy: u64): u64 {
-        // Knowledge component
-        let knowledge = knowledge_score * KNOWLEDGE_WEIGHT_FACTOR;
-        
-        // Stake component (logarithmic growth)
-        let stake_multiplier = math::sqrt(stake_amount / 1_000_000_000) * 100;
-        let stake = stake_multiplier * STAKE_WEIGHT_FACTOR;
-        
-        // Performance component
-        let performance = consensus_accuracy * PERFORMANCE_WEIGHT_FACTOR;
-        
-        (knowledge + stake + performance) / BASE_WEIGHT_DIVISOR
+    fun calculate_weight(
+        knowledge_score: u64,
+        stake_amount: u64,
+        consensus_accuracy: u64,
+        exchange_rate: u64
+    ): u64 {
+        let base = stake_amount + (knowledge_score * exchange_rate);
+        (base * consensus_accuracy) / 100
     }
     
     fun process_certificates(
@@ -1125,14 +1154,15 @@ module core::governance {
             validation_count: 0,
             consensus_accuracy: 100,
             state: VALIDATOR_STATE_ACTIVE,
-            weight: calculate_weight(knowledge_score, stake_amount, 100),
+            weight: calculate_weight(knowledge_score, stake_amount, 100, pool.knowledge_exchange_rate),
             last_validation: 0,
             is_genesis,
             registration_time: 0,
         };
-        
+
         pool.total_weight = pool.total_weight + validator.weight;
         pool.total_stake = pool.total_stake + stake_amount;
+        pool.total_knowledge = pool.total_knowledge + knowledge_score;
         table::add(&mut pool.active_validators, validator_addr, validator);
     }
 }

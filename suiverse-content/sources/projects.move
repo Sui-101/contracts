@@ -1458,6 +1458,9 @@ module suiverse_content::projects {
             active_validators: table::new(ctx),
             total_weight: 0,
             total_stake: 0,
+            total_knowledge: 0,
+            knowledge_exchange_rate: 1,
+            current_epoch: 0,
             admin: TEST_ADMIN,
         };
         
@@ -1577,6 +1580,9 @@ module suiverse_content::projects {
             active_validators: table::new(ctx),
             total_weight: 0,
             total_stake: 0,
+            total_knowledge: 0,
+            knowledge_exchange_rate: 1,
+            current_epoch: 0,
             admin: TEST_ADMIN,
         };
         
@@ -1688,6 +1694,9 @@ module suiverse_content::projects {
             active_validators: table::new(ctx),
             total_weight: 0,
             total_stake: 0,
+            total_knowledge: 0,
+            knowledge_exchange_rate: 1,
+            current_epoch: 0,
             admin: TEST_ADMIN,
         };
         
