@@ -1911,6 +1911,9 @@ module suiverse_content::articles {
             active_validators: table::new(ctx),
             total_weight: 0,
             total_stake: 0,
+            total_knowledge: 0,
+            knowledge_exchange_rate: 1,
+            current_epoch: 0,
             admin: @0x1,
         };
         
@@ -2054,8 +2057,15 @@ module suiverse_content::articles {
         object::delete(id);
         table::drop(reviews);
         
-        let suiverse_core::governance::ValidatorPool { 
-            id: pool_id, active_validators, total_weight: _, total_stake: _, admin: _ 
+        let suiverse_core::governance::ValidatorPool {
+            id: pool_id,
+            active_validators,
+            total_weight: _,
+            total_stake: _,
+            total_knowledge: _,
+            knowledge_exchange_rate: _,
+            current_epoch: _,
+            admin: _
         } = validator_pool;
         object::delete(pool_id);
         table::drop(active_validators);
