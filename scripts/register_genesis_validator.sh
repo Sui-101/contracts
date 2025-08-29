@@ -66,4 +66,4 @@ sui client call \
     --args "$GOVERNANCE_CONFIG_ID" "$VALIDATOR_POOL_ID" "$TREASURY_ID" "$MIN_AMOUNT" "$COIN_OBJECT" "0x6" \
     --gas-budget 100000000
 
-echo "✅ Genesis validator registration completed!"
+echo "Genesis validator registration completed!"

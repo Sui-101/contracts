@@ -1,4 +1,4 @@
-module suiverse_core::governance {
+module core::governance {
     use std::string::{Self, String};
     use std::option::{Self, Option};
     use std::vector;
@@ -12,10 +12,8 @@ module suiverse_core::governance {
     use sui::clock::{Self, Clock};
     use sui::transfer;
     use sui::math;
-    use suiverse_core::parameters::GlobalParameters;
-    use suiverse_core::treasury::Treasury;
-    
-    // =============== Constants ===============
+    use core::parameters::GlobalParameters;
+    use core::treasury::Treasury;
     
     // Error codes - Configuration
     const E_NOT_AUTHORIZED: u64 = 1002;
@@ -91,8 +89,6 @@ module suiverse_core::governance {
     // Certificate scoring
     const BASE_CERTIFICATE_SCORE: u64 = 50;
     const CERTIFICATE_MULTIPLIER: u64 = 25;
-    
-    // =============== Structs ===============
     
     /// Main governance configuration (shared object)
     public struct GovernanceConfig has key {
@@ -428,7 +424,7 @@ module suiverse_core::governance {
         };
         
         // Record staking position in treasury
-        suiverse_core::treasury::create_validator_staking_position(
+        core::treasury::create_validator_staking_position(
             treasury,
             validator_address,
             stake_amount,
@@ -510,7 +506,7 @@ module suiverse_core::governance {
         };
         
         // Record staking position in treasury (for non-genesis validators)
-        suiverse_core::treasury::create_validator_staking_position(
+        core::treasury::create_validator_staking_position(
             treasury,
             validator_address,
             stake_amount,
@@ -558,7 +554,7 @@ module suiverse_core::governance {
         validator.weight = calculate_weight(validator.knowledge_score, new_stake_amount, validator.consensus_accuracy);
         
         // Update treasury staking position
-        suiverse_core::treasury::update_staking_position_stake(
+        core::treasury::update_staking_position_stake(
             treasury,
             validator_address,
             additional_amount,
@@ -601,7 +597,7 @@ module suiverse_core::governance {
         validator.weight = calculate_weight(validator.knowledge_score, new_stake_amount, validator.consensus_accuracy);
         
         // Update treasury staking position
-        suiverse_core::treasury::reduce_staking_position_stake(
+        core::treasury::reduce_staking_position_stake(
             treasury,
             validator_address,
             amount,
@@ -637,7 +633,7 @@ module suiverse_core::governance {
         assert!(table::contains(&pool.active_validators, validator_address), E_NOT_VALIDATOR);
         
         // Claim rewards through treasury
-        let reward_coin = suiverse_core::treasury::withdraw_staking_rewards(
+        let reward_coin = core::treasury::withdraw_staking_rewards(
             treasury,
             validator_address,
             auto_compound,
@@ -1069,7 +1065,7 @@ module suiverse_core::governance {
     ): (bool, u64, u64, u64) {
         if (table::contains(&pool.active_validators, validator)) {
             let (stake_amount, start_epoch, accumulated_rewards, reward_rate) = 
-                suiverse_core::treasury::get_staking_position(treasury, validator);
+                core::treasury::get_staking_position(treasury, validator);
             (true, stake_amount, accumulated_rewards, reward_rate)
         } else {
             (false, 0, 0, 0)
@@ -1083,7 +1079,7 @@ module suiverse_core::governance {
         current_epoch: u64
     ): u64 {
         let (stake_amount, start_epoch, accumulated_rewards, reward_rate) = 
-            suiverse_core::treasury::get_staking_position(treasury, validator);
+            core::treasury::get_staking_position(treasury, validator);
         
         if (stake_amount == 0) {
             return 0

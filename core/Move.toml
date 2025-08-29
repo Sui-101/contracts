@@ -1,15 +1,13 @@
 [package]
-name = "SuiVerseContent"
+name = "core"
 version = "1.0.0"
 authors = ["Jinu Ahn"]
 edition = "2024.beta"
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
-SuiVerseCore = { local = "../suiverse-core" }
 
 [addresses]
-suiverse_core = "0x0"
-suiverse_content = "0x1"
+core = "0x0"
 
 [dev-dependencies]

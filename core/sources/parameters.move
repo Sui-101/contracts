@@ -1,4 +1,4 @@
-module suiverse_core::parameters {
+module core::parameters {
     use std::string::{Self as string, String};
     use std::option::{Self as option, Option};
     use sui::object::{ID, UID};
